@@ -1,0 +1,233 @@
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: #282a36;
+}
+
+#tab-bar {
+  display: flex;
+  align-items: center;
+  height: 36px;
+  background: var(--tab-bar-bg, #1e1f29);
+  border-bottom: 1px solid var(--tab-bar-border, #44475a);
+  padding: 0 4px;
+  padding-left: 84px; /* macOS traffic lights offset */
+  gap: 4px;
+  flex-shrink: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-app-region: drag;
+}
+
+#tab-bar::-webkit-scrollbar {
+  display: none;
+}
+
+#tab-bar .tab,
+#tab-bar .tab-add {
+  -webkit-app-region: no-drag;
+}
+
+.tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  background: var(--tab-bg, #282a36);
+  color: var(--tab-fg, #6272a4);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 12px;
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+  transition: background 0.15s, color 0.15s;
+  max-width: 160px;
+  min-width: 80px;
+}
+
+.tab:hover {
+  background: var(--tab-hover-bg, #44475a);
+  color: var(--tab-hover-fg, #f8f8f2);
+}
+
+.tab.active {
+  background: var(--tab-active-bg, #44475a);
+  color: var(--tab-active-fg, #f8f8f2);
+}
+
+.tab-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+}
+
+.tab-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  font-size: 14px;
+  line-height: 1;
+  opacity: 0.7;
+}
+
+.tab-close:hover {
+  background: #ff5555;
+  color: #fff;
+  opacity: 1;
+}
+
+.tab-add {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--tab-fg, #6272a4);
+  font-size: 16px;
+  cursor: pointer;
+  user-select: none;
+  flex-shrink: 0;
+  transition: background 0.15s, color 0.15s;
+}
+
+.tab-add:hover {
+  background: var(--tab-hover-bg, #44475a);
+  color: var(--tab-hover-fg, #f8f8f2);
+}
+
+#terminal-container {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+  min-height: 0;
+}
+
+body {
+  display: flex;
+  flex-direction: column;
+}
+
+.tab-terminal-container {
+  width: 100%;
+  height: 100%;
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+
+.xterm {
+  padding: 4px;
+}
+
+/* Copy Mode Overlay */
+.copy-mode-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  overflow: auto;
+  font-family: Menlo, Monaco, "Courier New", monospace;
+  font-size: 14px;
+  line-height: 1.2;
+  padding: 4px;
+  background: var(--copy-mode-bg, #282a36);
+  color: var(--copy-mode-fg, #f8f8f2);
+  z-index: 100;
+  white-space: pre;
+  cursor: text;
+  user-select: none;
+}
+
+.copy-mode-line {
+  display: block;
+  min-height: 1.2em;
+}
+
+.copy-mode-row {
+  display: flex;
+  align-items: flex-start;
+}
+
+.copy-mode-linenr {
+  display: inline-block;
+  width: 3ch;
+  text-align: right;
+  margin-right: 8px;
+  color: var(--copy-mode-linenr, #6272a4);
+  user-select: none;
+  flex-shrink: 0;
+}
+
+.copy-mode-linenr.current {
+  color: var(--copy-mode-linenr-current, #f8f8f2);
+  font-weight: bold;
+}
+
+.copy-mode-cursor {
+  position: absolute;
+  width: 1ch;
+  height: 1.2em;
+  background: var(--copy-mode-cursor, #f8f8f2);
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+.copy-mode-selection {
+  background: var(--copy-mode-selection, #44475a);
+  color: var(--copy-mode-selection-fg, #f8f8f2);
+}
+
+.copy-mode-search-highlight {
+  background: var(--copy-mode-search, #ffb86c);
+  color: var(--copy-mode-search-fg, #282a36);
+}
+
+.copy-mode-status-bar {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 24px;
+  background: var(--copy-mode-status-bg, #44475a);
+  color: var(--copy-mode-status-fg, #f8f8f2);
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  padding: 0 8px;
+  z-index: 101;
+}
+
+.copy-mode-search-input {
+  position: absolute;
+  bottom: 24px;
+  left: 0;
+  right: 0;
+  height: 28px;
+  background: var(--copy-mode-status-bg, #44475a);
+  color: var(--copy-mode-status-fg, #f8f8f2);
+  border: none;
+  outline: none;
+  padding: 0 8px;
+  font-family: inherit;
+  font-size: 13px;
+  z-index: 101;
+  display: none;
+}
+
+.copy-mode-search-input.active {
+  display: block;
+}
