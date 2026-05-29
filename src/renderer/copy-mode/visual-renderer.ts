@@ -54,12 +54,8 @@ export class VisualRenderer {
 
         const lineEl = document.createElement('span');
         lineEl.className = 'copy-mode-line';
-        let text = state.bufferLines[i] || '';
-
-        text = this.applySearchHighlights(text, i, state);
-        text = this.applySelection(text, i, state);
-
-        lineEl.innerHTML = text || ' ';
+        const text = state.bufferLines[i] || '';
+        lineEl.innerHTML = this.buildLineHtml(text, i, state);
         rowEl.appendChild(lineEl);
         this.overlay.appendChild(rowEl);
         this.lineElements.push(rowEl);
@@ -130,56 +126,66 @@ export class VisualRenderer {
     this.container.appendChild(this.searchInput);
   }
 
-  private applySearchHighlights(text: string, lineIdx: number, state: CopyModeState): string {
-    if (!state.searchQuery || state.searchResults.length === 0) return this.escapeHtml(text);
+  private buildLineHtml(text: string, lineIdx: number, state: CopyModeState): string {
+    if (!text) return ' ';
 
-    const resultsOnLine = state.searchResults.filter((r) => r.line === lineIdx);
-    if (resultsOnLine.length === 0) return this.escapeHtml(text);
+    // Determine which character positions are in the selection
+    const inSelection = new Set<number>();
+    if (state.anchor && state.subMode !== 'normal') {
+      const startLine = Math.min(state.anchor.line, state.cursor.line);
+      const endLine = Math.max(state.anchor.line, state.cursor.line);
+      if (lineIdx >= startLine && lineIdx <= endLine) {
+        const startCol = state.subMode === 'visualLine' ? 0 : Math.min(state.anchor.col, state.cursor.col);
+        const endCol = state.subMode === 'visualLine' ? text.length - 1 : Math.max(state.anchor.col, state.cursor.col);
+        for (let c = startCol; c <= endCol && c < text.length; c++) {
+          inSelection.add(c);
+        }
+      }
+    }
 
-    // Sort by column descending so we can build from the end
-    resultsOnLine.sort((a, b) => b.col - a.col);
+    // Determine which character positions are in search results
+    const inSearch = new Set<number>();
+    if (state.searchQuery && state.searchResults.length > 0) {
+      const resultsOnLine = state.searchResults.filter((r) => r.line === lineIdx);
+      for (const r of resultsOnLine) {
+        for (let c = r.col; c < r.col + state.searchQuery.length && c < text.length; c++) {
+          inSearch.add(c);
+        }
+      }
+    }
 
-    let result = this.escapeHtml(text);
-    for (const r of resultsOnLine) {
-      const before = result.slice(0, r.col);
-      const match = result.slice(r.col, r.col + state.searchQuery.length);
-      const after = result.slice(r.col + state.searchQuery.length);
-      const isCurrent = state.searchResults[state.currentSearchIndex]?.line === lineIdx &&
-        state.searchResults[state.currentSearchIndex]?.col === r.col;
-      const cls = isCurrent ? 'copy-mode-search-highlight' : 'copy-mode-search-highlight';
-      result = `${before}<span class="${cls}">${match}</span>${after}`;
+    // No highlighting needed
+    if (inSelection.size === 0 && inSearch.size === 0) {
+      return this.escapeHtml(text);
+    }
+
+    // Build HTML by grouping consecutive characters with the same classes
+    let result = '';
+    let i = 0;
+    while (i < text.length) {
+      const sel = inSelection.has(i);
+      const search = inSearch.has(i);
+
+      let j = i + 1;
+      while (j < text.length && inSelection.has(j) === sel && inSearch.has(j) === search) {
+        j++;
+      }
+
+      const segment = this.escapeHtml(text.slice(i, j));
+      if (sel && search) {
+        result += `<span class="copy-mode-selection copy-mode-search-highlight">${segment}</span>`;
+      } else if (sel) {
+        result += `<span class="copy-mode-selection">${segment}</span>`;
+      } else if (search) {
+        result += `<span class="copy-mode-search-highlight">${segment}</span>`;
+      } else {
+        result += segment;
+      }
+
+      i = j;
     }
 
     return result;
-  }
-
-  private applySelection(text: string, lineIdx: number, state: CopyModeState): string {
-    if (!state.anchor || state.subMode === 'normal') return this.escapeHtml(text);
-
-    const start: CopyModePosition = {
-      line: Math.min(state.anchor.line, state.cursor.line),
-      col: state.subMode === 'visualLine' ? 0 : Math.min(state.anchor.col, state.cursor.col),
-    };
-    const end: CopyModePosition = {
-      line: Math.max(state.anchor.line, state.cursor.line),
-      col: state.subMode === 'visualLine' ? text.length : Math.max(state.anchor.col, state.cursor.col),
-    };
-
-    if (lineIdx < start.line || lineIdx > end.line) return this.escapeHtml(text);
-
-    const escaped = this.escapeHtml(text);
-    if (state.subMode === 'visualLine') {
-      return `<span class="copy-mode-selection">${escaped}</span>`;
-    }
-
-    const selStart = lineIdx === start.line ? start.col : 0;
-    const selEnd = lineIdx === end.line ? end.col : text.length;
-
-    const before = escaped.slice(0, selStart);
-    const selected = escaped.slice(selStart, selEnd);
-    const after = escaped.slice(selEnd);
-
-    return `${before}<span class="copy-mode-selection">${selected}</span>${after}`;
   }
 
   private updateStatusBar(state: CopyModeState): void {

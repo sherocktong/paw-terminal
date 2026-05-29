@@ -17,6 +17,7 @@ export const IPC_CHANNELS = {
   THEME_GET_SYSTEM: 'theme:getSystem',
   THEME_SYSTEM_CHANGED: 'theme:systemChanged',
   WINDOW_STATE: 'window:state',
+  WINDOW_TOGGLE_MAXIMIZE: 'window:toggleMaximize',
 } as const;
 
 export const DEFAULT_CONFIG: Config = {

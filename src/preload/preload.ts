@@ -25,12 +25,14 @@ export interface PuppyApi {
   };
   window: {
     saveState: (state: WindowState) => void;
+    toggleMaximize: () => void;
   };
   menu: {
     onNewTab: (callback: () => void) => () => void;
     onCloseTab: (callback: () => void) => () => void;
     onPrevTab: (callback: () => void) => () => void;
     onNextTab: (callback: () => void) => () => void;
+    onShowShortcuts: (callback: () => void) => () => void;
   };
 }
 
@@ -82,6 +84,7 @@ const api: PuppyApi = {
   },
   window: {
     saveState: (state: WindowState) => ipcRenderer.send(IPC_CHANNELS.WINDOW_STATE, state),
+    toggleMaximize: () => ipcRenderer.send(IPC_CHANNELS.WINDOW_TOGGLE_MAXIMIZE),
   },
   menu: {
     onNewTab: (callback) => {
@@ -110,6 +113,13 @@ const api: PuppyApi = {
       ipcRenderer.on('menu:nextTab', handler);
       return () => {
         ipcRenderer.removeListener('menu:nextTab', handler);
+      };
+    },
+    onShowShortcuts: (callback) => {
+      const handler = () => callback();
+      ipcRenderer.on('menu:showShortcuts', handler);
+      return () => {
+        ipcRenderer.removeListener('menu:showShortcuts', handler);
       };
     },
   },

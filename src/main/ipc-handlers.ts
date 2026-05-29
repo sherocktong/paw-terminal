@@ -85,6 +85,15 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     });
   });
 
+  // Window toggle maximize
+  ipcMain.on(IPC_CHANNELS.WINDOW_TOGGLE_MAXIMIZE, () => {
+    if (mainWindow.isMaximized()) {
+      mainWindow.unmaximize();
+    } else {
+      mainWindow.maximize();
+    }
+  });
+
   // Window state save on close
   mainWindow.on('close', () => {
     const config = loadConfig();

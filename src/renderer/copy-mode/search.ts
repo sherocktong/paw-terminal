@@ -15,8 +15,21 @@ export function searchBuffer(
     return { positions: [], currentIndex: -1 };
   }
 
+  // Parse Vim-style \c (ignore case) and \C (match case) flags
+  let flags = 'g';
+  if (pattern.includes('\\c')) {
+    flags += 'i';
+  } else if (pattern.includes('\\C')) {
+    // case-sensitive: no 'i' flag
+  } else {
+    // Default: case-insensitive to preserve existing behavior
+    flags += 'i';
+  }
+
+  const cleanPattern = pattern.replace(/\\[cC]/g, '');
+
   const positions: CopyModePosition[] = [];
-  const regex = new RegExp(pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
+  const regex = new RegExp(cleanPattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), flags);
 
   for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {
     const line = lines[lineIdx];

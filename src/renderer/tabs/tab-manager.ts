@@ -5,6 +5,7 @@ import type { Config } from '../../shared/types';
 import { initializeTerminal, resizeTerminal } from '../terminal/terminal';
 import { ThemeManager } from '../theme/theme-manager';
 import { CopyMode } from '../copy-mode/copy-mode';
+import { ShortcutsPanel } from '../shortcuts-panel/shortcuts-panel';
 
 interface Tab {
   id: string;
@@ -30,6 +31,7 @@ export class TabManager {
   private globalDataUnsubscribe: (() => void) | null = null;
   private resizeObserver: ResizeObserver | null = null;
   private cwdPollInterval: NodeJS.Timeout | null = null;
+  private shortcutsPanel: ShortcutsPanel | null = null;
 
   constructor(
     terminalContainer: HTMLElement,
@@ -214,6 +216,10 @@ export class TabManager {
     }
   }
 
+  setShortcutsPanel(panel: ShortcutsPanel): void {
+    this.shortcutsPanel = panel;
+  }
+
   dispose(): void {
     this.stopCwdPolling();
     if (this.globalDataUnsubscribe) {
@@ -275,6 +281,29 @@ export class TabManager {
 
   private setupKeyboardShortcuts(): void {
     document.addEventListener('keydown', (e) => {
+      // Shortcuts panel takes precedence when visible
+      if (this.shortcutsPanel?.isVisible()) {
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          this.shortcutsPanel.hide();
+          return;
+        }
+        if ((e.metaKey || e.ctrlKey) && e.key === '/') {
+          e.preventDefault();
+          this.shortcutsPanel.toggle();
+          return;
+        }
+        // Block all other keys while panel is open
+        return;
+      }
+
+      // Cmd/Ctrl+/: Toggle shortcuts panel
+      if ((e.metaKey || e.ctrlKey) && e.key === '/') {
+        e.preventDefault();
+        this.shortcutsPanel?.toggle();
+        return;
+      }
+
       // Route copy mode keys for the active tab
       if (this.activeIndex >= 0 && this.activeIndex < this.tabs.length) {
         const activeTab = this.tabs[this.activeIndex];
@@ -337,6 +366,13 @@ export class TabManager {
         if (idx < this.tabs.length) {
           this.activateTab(idx);
         }
+        return;
+      }
+
+      // Cmd/Ctrl+Shift+Z: Toggle window maximize (zoom)
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === 'z') {
+        e.preventDefault();
+        window.puppy.window.toggleMaximize();
         return;
       }
     });

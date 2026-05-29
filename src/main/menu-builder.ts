@@ -65,6 +65,16 @@ export function buildMenu(): Menu {
         { role: 'forceReload' },
         { role: 'toggleDevTools' },
         { type: 'separator' },
+        {
+          label: 'Show Keyboard Shortcuts',
+          accelerator: 'CmdOrCtrl+/',
+          click: (_item, focusedWindow) => {
+            if (focusedWindow) {
+              focusedWindow.webContents.send('menu:showShortcuts');
+            }
+          },
+        },
+        { type: 'separator' },
         { role: 'resetZoom' },
         { role: 'zoomIn' },
         { role: 'zoomOut' },
@@ -90,6 +100,19 @@ export function buildMenu(): Menu {
           click: (_item, focusedWindow) => {
             if (focusedWindow) {
               focusedWindow.webContents.send('menu:nextTab');
+            }
+          },
+        },
+        { type: 'separator' },
+        {
+          label: 'Zoom Window',
+          click: (_item, focusedWindow) => {
+            if (focusedWindow) {
+              if (focusedWindow.isMaximized()) {
+                focusedWindow.unmaximize();
+              } else {
+                focusedWindow.maximize();
+              }
             }
           },
         },

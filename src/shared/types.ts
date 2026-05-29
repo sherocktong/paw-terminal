@@ -107,4 +107,5 @@ export interface IpcChannels {
   'theme:getSystem': () => AppearanceMode;
   'theme:systemChanged': (mode: AppearanceMode) => void;
   'window:state': (state: WindowState) => void;
+  'window:toggleMaximize': () => void;
 }
