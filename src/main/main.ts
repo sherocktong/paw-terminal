@@ -33,6 +33,10 @@ async function createMainWindow(): Promise<void> {
 }
 
 app.whenReady().then(() => {
+  app.setAboutPanelOptions({
+    applicationName: app.name,
+    applicationVersion: app.getVersion(),
+  });
   setApplicationMenu();
   createMainWindow();
 

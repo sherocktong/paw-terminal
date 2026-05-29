@@ -55,12 +55,8 @@ fi
 
 # Collect artifacts to upload
 ARTIFACTS=()
-for f in release/*.{dmg,exe,msi,AppImage,zip,blockmap,yml,yaml}; do
+for f in release/*.dmg; do
     [ -e "$f" ] || continue
-    # Skip debug/config files that aren't install packages or update metadata
-    case "$(basename "$f")" in
-        builder-*) continue ;;
-    esac
     ARTIFACTS+=("$f")
 done
 
