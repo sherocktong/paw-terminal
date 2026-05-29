@@ -30,6 +30,20 @@ if ! gh auth status &> /dev/null; then
     exit 1
 fi
 
+# Check working directory is clean
+if ! git diff --quiet HEAD || ! git diff --cached --quiet; then
+    echo "Error: Working directory is not clean."
+    echo "Please commit or stash your changes before publishing."
+    exit 1
+fi
+
+# Bump patch version automatically
+echo "Bumping patch version..."
+npm version patch --no-git-tag-version
+git add package.json package-lock.json
+git commit -m "chore(release): bump version to $(node -p "require('./package.json').version")"
+echo ""
+
 # Get version from package.json
 VERSION=$(node -p "require('./package.json').version")
 TAG="v${VERSION}"
@@ -71,35 +85,6 @@ for f in "${ARTIFACTS[@]}"; do
     echo "  - $(basename "$f")"
 done
 echo ""
-
-# Commit any uncommitted changes with an AI-generated message
-if ! git diff --quiet HEAD || ! git diff --cached --quiet; then
-    echo "Uncommitted changes detected."
-    echo ""
-
-    # Generate commit message using cc-hub run -p
-    echo "Generating commit message..."
-    COMMIT_MSG=$(cc-hub run -p "You are preparing a commit for the Paw Terminal project (an Electron-based terminal emulator).
-
-Here is the current git diff (staged and unstaged):
-
-$(git diff HEAD)
-
-Write a single-line conventional commit message (format: type: description).
-If the only changes are version bumps, use 'chore(release): bump version to X.Y.Z'.
-Output ONLY the raw commit message text. No markdown, no quotes, no extra explanation." 2>/dev/null | sed 's/^["\x27]*//;s/["\x27]*$//' | head -n 1)
-
-    if [ -z "$COMMIT_MSG" ]; then
-        COMMIT_MSG="chore(release): prepare ${TAG}"
-    fi
-
-    echo "Commit message: ${COMMIT_MSG}"
-    echo ""
-
-    git add -A
-    git commit -m "$COMMIT_MSG"
-    echo ""
-fi
 
 # Create tag if it doesn't exist locally
 if ! git rev-parse "$TAG" &> /dev/null; then
