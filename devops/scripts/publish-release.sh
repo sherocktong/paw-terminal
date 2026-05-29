@@ -60,10 +60,16 @@ echo "Tag:      ${TAG}"
 echo "Remote:   ${REMOTE_URL}"
 echo ""
 
+# Build release packages
+echo "Building release packages..."
+echo ""
+rm -rf release
+npm run dist
+echo ""
+
 # Check for release artifacts
 if [ ! -d "release" ]; then
-    echo "Error: release/ directory not found"
-    echo "Run: npm run dist  (or devops/scripts/package.sh)"
+    echo "Error: release/ directory not found after build"
     exit 1
 fi
 
@@ -76,7 +82,6 @@ done
 
 if [ ${#ARTIFACTS[@]} -eq 0 ]; then
     echo "Error: No release artifacts found in release/"
-    echo "Run: npm run dist  (or devops/scripts/package.sh)"
     exit 1
 fi
 
@@ -120,13 +125,28 @@ if gh release view "$TAG" &> /dev/null; then
         exit 1
     fi
     echo "Uploading to existing release ${TAG}..."
-    gh release upload "$TAG" "${ARTIFACTS[@]}" --clobber
+    for i in "${!ARTIFACTS[@]}"; do
+        f="${ARTIFACTS[$i]}"
+        num=$((i + 1))
+        total=${#ARTIFACTS[@]}
+        echo "  [${num}/${total}] Uploading $(basename "$f")..."
+        gh release upload "$TAG" "$f" --clobber
+    done
 else
     echo "Creating release ${TAG}..."
     gh release create "$TAG" \
         --title "${TAG}" \
-        --generate-notes \
-        "${ARTIFACTS[@]}"
+        --generate-notes
+
+    echo ""
+    echo "Uploading artifacts..."
+    for i in "${!ARTIFACTS[@]}"; do
+        f="${ARTIFACTS[$i]}"
+        num=$((i + 1))
+        total=${#ARTIFACTS[@]}
+        echo "  [${num}/${total}] Uploading $(basename "$f")..."
+        gh release upload "$TAG" "$f"
+    done
 fi
 
 echo ""
