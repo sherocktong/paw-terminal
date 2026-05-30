@@ -198,6 +198,9 @@ export class CopyMode {
       case 'yank':
         this.yankSelection();
         break;
+      case 'yankLine':
+        this.yankLines(count);
+        break;
       case 'searchForward':
         this.startSearch('forward');
         break;
@@ -316,6 +319,18 @@ export class CopyMode {
       const text = this.getSelectionText();
       window.puppy.clipboard.writeText(text);
     }
+    this.exit();
+  }
+
+  private yankLines(count: number): void {
+    const lines: string[] = [];
+    for (let i = 0; i < count; i++) {
+      const lineIndex = this.state.cursor.line + i;
+      if (lineIndex < this.state.bufferLines.length) {
+        lines.push(this.state.bufferLines[lineIndex]);
+      }
+    }
+    window.puppy.clipboard.writeText(lines.join('\n') + '\n');
     this.exit();
   }
 

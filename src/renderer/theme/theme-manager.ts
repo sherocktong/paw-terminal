@@ -14,6 +14,7 @@ export class ThemeManager {
     this.currentTheme = this.resolveTheme(config.theme);
     this.applyGlobalStyles(this.currentTheme);
     this.setupSystemAppearance();
+    this.setupViewportObserver();
   }
 
   addTerminal(term: Terminal): void {
@@ -129,7 +130,13 @@ export class ThemeManager {
     root.style.setProperty('--tab-active-bg', isLight ? '#d8d8d8' : '#44475a');
     root.style.setProperty('--tab-active-fg', isLight ? '#333333' : '#f8f8f2');
 
+    document.documentElement.style.background = theme.colors.background;
     document.body.style.background = theme.colors.background;
+
+    // Fix xterm viewport background: xterm sets it to #000 via JS, overriding CSS
+    document.querySelectorAll('.xterm-viewport').forEach((el) => {
+      (el as HTMLElement).style.setProperty('background-color', 'transparent', 'important');
+    });
   }
 
   private async setupSystemAppearance(): Promise<void> {
@@ -144,6 +151,24 @@ export class ThemeManager {
         }
       }
     });
+  }
+
+  private setupViewportObserver(): void {
+    const observer = new MutationObserver((mutations) => {
+      for (const mutation of mutations) {
+        for (const node of mutation.addedNodes) {
+          if (node instanceof HTMLElement) {
+            if (node.classList.contains('xterm-viewport')) {
+              node.style.setProperty('background-color', 'transparent', 'important');
+            }
+            node.querySelectorAll('.xterm-viewport').forEach((el) => {
+              (el as HTMLElement).style.setProperty('background-color', 'transparent', 'important');
+            });
+          }
+        }
+      }
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
   }
 
   dispose(): void {

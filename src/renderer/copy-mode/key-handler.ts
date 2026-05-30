@@ -8,6 +8,7 @@ export interface ParsedCommand {
 export class KeyHandler {
   private pendingCount = '';
   private pendingOperator = '';
+  private pendingOperatorCount = 1;
 
   handle(event: KeyboardEvent): ParsedCommand | null {
     const key = event.key;
@@ -73,9 +74,10 @@ export class KeyHandler {
     if (key === 'g' && !shift && !ctrl) {
       if (this.pendingOperator === 'g') {
         this.pendingOperator = '';
-        return { command: 'moveFirstLine', count };
+        return { command: 'moveFirstLine', count: this.pendingOperatorCount * count };
       }
       this.pendingOperator = 'g';
+      this.pendingOperatorCount = count;
       return { command: 'noop' };
     }
     if (key === 'G' && shift) {
@@ -115,7 +117,13 @@ export class KeyHandler {
 
     // Yank
     if (key === 'y' && !shift && !ctrl) {
-      return { command: 'yank' };
+      if (this.pendingOperator === 'y') {
+        this.pendingOperator = '';
+        return { command: 'yankLine', count: this.pendingOperatorCount * count };
+      }
+      this.pendingOperator = 'y';
+      this.pendingOperatorCount = count;
+      return { command: 'noop' };
     }
 
     // Search
@@ -149,5 +157,6 @@ export class KeyHandler {
   reset(): void {
     this.pendingCount = '';
     this.pendingOperator = '';
+    this.pendingOperatorCount = 1;
   }
 }

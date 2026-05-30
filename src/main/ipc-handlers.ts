@@ -1,4 +1,4 @@
-import { ipcMain, clipboard, nativeTheme, BrowserWindow } from 'electron';
+import { ipcMain, clipboard, nativeTheme, BrowserWindow, app } from 'electron';
 import crypto from 'crypto';
 import { IPC_CHANNELS } from '../shared/constants';
 import { loadConfig, saveConfig } from './config-manager';
@@ -92,6 +92,16 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     } else {
       mainWindow.maximize();
     }
+  });
+
+  // Minimize window
+  ipcMain.on(IPC_CHANNELS.WINDOW_MINIMIZE, () => {
+    mainWindow.minimize();
+  });
+
+  // Quit app
+  ipcMain.on(IPC_CHANNELS.APP_QUIT, () => {
+    app.quit();
   });
 
   // Window state save on close

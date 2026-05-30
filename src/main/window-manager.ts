@@ -3,11 +3,12 @@ import path from 'path';
 import type { Config, AppearanceMode, WindowState } from '../shared/types';
 
 function getInitialBackgroundColor(config: Config): string {
-  const isDark = nativeTheme.shouldUseDarkColors;
+  const lightThemes = ['solarized-light'];
+  const isLight = lightThemes.includes(config.theme);
   if (config.theme === 'auto' || config.theme === 'system') {
-    return isDark ? '#282a36' : '#fdf6e3';
+    return nativeTheme.shouldUseDarkColors ? '#282a36' : '#fdf6e3';
   }
-  return isDark ? '#282a36' : '#fdf6e3';
+  return isLight ? '#fdf6e3' : '#282a36';
 }
 
 const isMac = process.platform === 'darwin';
@@ -25,6 +26,7 @@ export function createWindow(config: Config): BrowserWindow {
     titleBarStyle: isMac ? 'hidden' : undefined,
     frame: !isMac,
     trafficLightPosition: isMac ? { x: 16, y: 10 } : undefined,
+    hasShadow: false,
     show: false,
     webPreferences: {
       preload: path.join(__dirname, '../preload/preload.cjs'),

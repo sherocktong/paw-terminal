@@ -144,8 +144,7 @@ export class TabManager {
       this.stopCwdPolling();
       this.activeIndex = -1;
       this.renderTabBar();
-      // Auto-open a new tab when the last one closes
-      this.addTab();
+      window.puppy.window.quit();
       return;
     }
 

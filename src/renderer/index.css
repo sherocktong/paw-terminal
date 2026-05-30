@@ -49,7 +49,7 @@ html, body {
   user-select: none;
   white-space: nowrap;
   transition: background 0.15s, color 0.15s;
-  max-width: 160px;
+  flex: 1;
   min-width: 80px;
 }
 
@@ -130,6 +130,11 @@ body {
 
 .xterm {
   padding: 4px;
+}
+
+/* Prevent xterm viewport black background from showing through gaps */
+.xterm .xterm-viewport {
+  background-color: transparent !important;
 }
 
 /* Copy Mode Overlay */

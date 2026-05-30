@@ -26,6 +26,8 @@ export interface PuppyApi {
   window: {
     saveState: (state: WindowState) => void;
     toggleMaximize: () => void;
+    minimize: () => void;
+    quit: () => void;
   };
   menu: {
     onNewTab: (callback: () => void) => () => void;
@@ -85,6 +87,8 @@ const api: PuppyApi = {
   window: {
     saveState: (state: WindowState) => ipcRenderer.send(IPC_CHANNELS.WINDOW_STATE, state),
     toggleMaximize: () => ipcRenderer.send(IPC_CHANNELS.WINDOW_TOGGLE_MAXIMIZE),
+    minimize: () => ipcRenderer.send(IPC_CHANNELS.WINDOW_MINIMIZE),
+    quit: () => ipcRenderer.send(IPC_CHANNELS.APP_QUIT),
   },
   menu: {
     onNewTab: (callback) => {

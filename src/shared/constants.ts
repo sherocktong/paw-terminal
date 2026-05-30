@@ -18,6 +18,8 @@ export const IPC_CHANNELS = {
   THEME_SYSTEM_CHANGED: 'theme:systemChanged',
   WINDOW_STATE: 'window:state',
   WINDOW_TOGGLE_MAXIMIZE: 'window:toggleMaximize',
+  WINDOW_MINIMIZE: 'window:minimize',
+  APP_QUIT: 'app:quit',
 } as const;
 
 export const DEFAULT_CONFIG: Config = {
@@ -201,7 +203,8 @@ export const COPY_MODE_COMMANDS = [
   'moveLineStart', 'moveLineStartNonBlank', 'moveLineEnd',
   'moveFirstLine', 'moveLastLine', 'moveScreenTop', 'moveScreenMiddle', 'moveScreenBottom',
   'scrollHalfPageDown', 'scrollHalfPageUp', 'scrollPageDown', 'scrollPageUp',
-  'enterVisual', 'enterVisualLine', 'yank', 'searchForward', 'searchBackward',
+  'enterVisual', 'enterVisualLine', 'yank', 'yankLine',
+  'searchForward', 'searchBackward',
   'nextSearch', 'prevSearch', 'exit', 'noop',
 ] as const;
 
