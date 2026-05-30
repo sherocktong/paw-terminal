@@ -3,12 +3,14 @@ import type { CopyModeCommand } from '../../shared/constants';
 export interface ParsedCommand {
   command: CopyModeCommand;
   count?: number;
+  textObject?: string;
 }
 
 export class KeyHandler {
   private pendingCount = '';
   private pendingOperator = '';
   private pendingOperatorCount = 1;
+  private pendingTextObjectQualifier = '';
 
   handle(event: KeyboardEvent): ParsedCommand | null {
     const key = event.key;
@@ -28,6 +30,42 @@ export class KeyHandler {
 
     const count = this.pendingCount ? parseInt(this.pendingCount, 10) : 1;
     this.pendingCount = '';
+
+    // ── Resolve pending operators before regular movement ──
+
+    // yy → yank line
+    if (key === 'y' && !shift && !ctrl && this.pendingOperator === 'y') {
+      this.pendingOperator = '';
+      return { command: 'yankLine', count: this.pendingOperatorCount * count };
+    }
+
+    // gg → move to first line
+    if (key === 'g' && !shift && !ctrl && this.pendingOperator === 'g') {
+      this.pendingOperator = '';
+      return { command: 'moveFirstLine', count: this.pendingOperatorCount * count };
+    }
+
+    // Text object: y i/a w
+    if (this.pendingOperator === 'y' && this.pendingTextObjectQualifier && key === 'w' && !shift && !ctrl && !alt) {
+      const textObject = this.pendingTextObjectQualifier + 'w';
+      this.pendingOperator = '';
+      this.pendingTextObjectQualifier = '';
+      return { command: 'yankTextObject', textObject, count: this.pendingOperatorCount };
+    }
+
+    // Text object qualifier (i / a)
+    if (this.pendingOperator === 'y' && (key === 'i' || key === 'a') && !shift && !ctrl && !alt) {
+      this.pendingTextObjectQualifier = key;
+      return { command: 'noop' };
+    }
+
+    // If any other pending operator didn't match, clear it
+    if (this.pendingOperator) {
+      this.pendingOperator = '';
+      this.pendingTextObjectQualifier = '';
+    }
+
+    // ── Regular commands ──
 
     // Movement keys
     if (key === 'h' || (key === 'ArrowLeft' && !ctrl)) {
@@ -72,10 +110,6 @@ export class KeyHandler {
       return { command: 'moveLineEnd' };
     }
     if (key === 'g' && !shift && !ctrl) {
-      if (this.pendingOperator === 'g') {
-        this.pendingOperator = '';
-        return { command: 'moveFirstLine', count: this.pendingOperatorCount * count };
-      }
       this.pendingOperator = 'g';
       this.pendingOperatorCount = count;
       return { command: 'noop' };
@@ -115,12 +149,8 @@ export class KeyHandler {
       return { command: 'enterVisualLine' };
     }
 
-    // Yank
+    // Yank (first y of operator-pending)
     if (key === 'y' && !shift && !ctrl) {
-      if (this.pendingOperator === 'y') {
-        this.pendingOperator = '';
-        return { command: 'yankLine', count: this.pendingOperatorCount * count };
-      }
       this.pendingOperator = 'y';
       this.pendingOperatorCount = count;
       return { command: 'noop' };
@@ -145,12 +175,6 @@ export class KeyHandler {
       return { command: 'exit' };
     }
 
-    // If pending operator didn't match, clear it
-    if (this.pendingOperator) {
-      this.pendingOperator = '';
-      return { command: 'noop' };
-    }
-
     return null;
   }
 
@@ -158,5 +182,6 @@ export class KeyHandler {
     this.pendingCount = '';
     this.pendingOperator = '';
     this.pendingOperatorCount = 1;
+    this.pendingTextObjectQualifier = '';
   }
 }

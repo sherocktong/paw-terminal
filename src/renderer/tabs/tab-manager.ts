@@ -19,6 +19,7 @@ interface Tab {
   copyMode: CopyMode;
   container: HTMLElement;
   onDataUnsubscribe: () => void;
+  onInputUnsubscribe: () => void; // term.onData → shell.write
 }
 
 export class TabManager {
@@ -79,6 +80,11 @@ export class TabManager {
 
     const copyMode = new CopyMode(term, container, this.config, this.themeManager);
 
+    // Send input to pty (keyboard / drop / paste → shell)
+    const inputDisposable = term.onData((data) => {
+      window.puppy.shell.write(id, data);
+    });
+
     const tab: Tab = {
       id,
       pid,
@@ -91,6 +97,7 @@ export class TabManager {
       copyMode,
       container,
       onDataUnsubscribe: () => {},
+      onInputUnsubscribe: () => inputDisposable.dispose(),
     };
 
     // Listen for data specifically for this tab
@@ -98,11 +105,6 @@ export class TabManager {
       if (dataId === id) {
         term.write(data);
       }
-    });
-
-    // Send input to pty
-    term.onData((data) => {
-      window.puppy.shell.write(id, data);
     });
 
     // Register OSC handlers for title (0/1/2) and CWD (7)
@@ -134,6 +136,7 @@ export class TabManager {
 
     const tab = this.tabs[index];
     tab.onDataUnsubscribe();
+    tab.onInputUnsubscribe();
     tab.copyMode.exit();
     this.themeManager.removeTerminal(tab.term);
     tab.term.dispose();
@@ -420,6 +423,9 @@ export class TabManager {
     document.addEventListener('dragover', (e) => {
       e.preventDefault();
     });
+    document.addEventListener('drop', (e) => {
+      e.preventDefault();
+    });
   }
 
   private setupDragAndDrop(container: HTMLElement): void {
@@ -480,8 +486,26 @@ export class TabManager {
 
       if (paths.length === 0) return;
 
-      const text = paths.join(' ') + ' ';
-      window.puppy.shell.write(tab.id, text);
+      const text = paths.join(' ');
+      // Wrap in bracketed-paste sequences so Claude Code treats the drop
+      // exactly like a paste, triggering image-path detection.
+      const bracketed = '\x1b[200~' + text + '\x1b[201~ ';
+
+      // Temporarily disconnect xterm.js → shell so any browser-native drop text
+      // that xterm.js injects into its textarea doesn't leak to the pty.
+      tab.onInputUnsubscribe();
+
+      window.puppy.shell.write(tab.id, bracketed);
+
+      // Reconnect after a tick; any native input events fired during drop are now ignored.
+      requestAnimationFrame(() => {
+        const disposable = tab.term.onData((data) => {
+          window.puppy.shell.write(tab.id, data);
+        });
+        tab.onInputUnsubscribe = () => disposable.dispose();
+        // Restore focus in case the drag caused the window to blur
+        tab.term.focus();
+      });
     });
   }
 

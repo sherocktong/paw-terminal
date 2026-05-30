@@ -108,6 +108,13 @@ export class CopyMode {
       return true;
     }
 
+    // In visual mode, 'y' yanks the selection immediately (vim behavior)
+    if (this.state.subMode !== 'normal' && e.key === 'y' && !e.shiftKey && !e.ctrlKey && !e.altKey && !e.metaKey) {
+      e.preventDefault();
+      this.executeCommand({ command: 'yank', count: 1 });
+      return true;
+    }
+
     const parsed = this.keyHandlerInstance.handle(e);
     if (!parsed) return false;
 
@@ -164,7 +171,10 @@ export class CopyMode {
         this.state.cursor.col = 0;
         break;
       case 'moveLastLine':
-        this.state.cursor.line = Math.max(0, Math.min(count - 1, this.state.bufferLines.length - 1));
+        // G without count → last line; 5G → line 5 (1-indexed)
+        this.state.cursor.line = count === 1
+          ? Math.max(0, this.state.bufferLines.length - 1)
+          : Math.max(0, Math.min(count - 1, this.state.bufferLines.length - 1));
         break;
       case 'moveScreenTop':
         this.state.cursor.line = 0;
@@ -200,6 +210,9 @@ export class CopyMode {
         break;
       case 'yankLine':
         this.yankLines(count);
+        break;
+      case 'yankTextObject':
+        this.yankTextObject((cmd as any).textObject as string);
         break;
       case 'searchForward':
         this.startSearch('forward');
@@ -332,6 +345,67 @@ export class CopyMode {
     }
     window.puppy.clipboard.writeText(lines.join('\n') + '\n');
     this.exit();
+  }
+
+  private yankTextObject(textObject: string): void {
+    const { start, end } = this.findTextObjectBounds(textObject);
+    this.state.anchor = start;
+    this.state.cursor = end;
+    this.state.subMode = 'visual';
+    const text = this.getSelectionText();
+    window.puppy.clipboard.writeText(text);
+    this.exit();
+  }
+
+  private findTextObjectBounds(textObject: string): { start: CopyModePosition; end: CopyModePosition } {
+    const line = this.state.cursor.line;
+    const text = this.state.bufferLines[line] || '';
+    const col = Math.min(this.state.cursor.col, text.length - 1);
+
+    const wordChars = /[a-zA-Z0-9_]/;
+
+    // Find start of word (first word char at or before cursor)
+    let startCol = col;
+    while (startCol > 0 && wordChars.test(text[startCol - 1])) {
+      startCol--;
+    }
+    // If cursor is on non-word char, scan forward to find word start
+    if (!wordChars.test(text[startCol])) {
+      while (startCol < text.length && !wordChars.test(text[startCol])) {
+        startCol++;
+      }
+    }
+
+    // Find end of word (last word char at or after cursor)
+    let endCol = startCol;
+    while (endCol < text.length && wordChars.test(text[endCol])) {
+      endCol++;
+    }
+    endCol = Math.max(0, endCol - 1);
+
+    const start: CopyModePosition = { line, col: startCol };
+    const end: CopyModePosition = { line, col: endCol };
+
+    if (textObject === 'aw') {
+      // Include trailing whitespace
+      let trailing = endCol + 1;
+      while (trailing < text.length && (text[trailing] === ' ' || text[trailing] === '\t')) {
+        trailing++;
+      }
+      if (trailing > endCol + 1) {
+        return { start, end: { line, col: trailing - 1 } };
+      }
+      // No trailing space — include leading whitespace instead
+      let leading = startCol - 1;
+      while (leading >= 0 && (text[leading] === ' ' || text[leading] === '\t')) {
+        leading--;
+      }
+      if (leading < startCol - 1) {
+        return { start: { line, col: leading + 1 }, end };
+      }
+    }
+
+    return { start, end };
   }
 
   private getSelectionText(): string {
