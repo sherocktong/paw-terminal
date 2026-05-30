@@ -8,7 +8,7 @@ A modern, themeable terminal emulator built with Electron and TypeScript. Featur
 - **Vim-like Copy Mode** — Navigate scrollback with `hjkl`, search with `/`, visually select with `v`, and yank to clipboard
 - **Auto Appearance** — Automatically switches between dark and light themes based on system preference
 - **Customizable Themes** — Built-in themes (Dracula, One Dark, Solarized, Gruvbox) plus custom theme support
-- **JSON Configuration** — All settings managed via `~/.config/puppy/config.json`
+- **JSON Configuration** — All settings managed via `~/.config/paw/config.json`
 - **Cross-Platform** — Packaged for macOS (DMG), Windows (NSIS installer), and Linux (AppImage)
 
 ## Development
@@ -52,7 +52,7 @@ npm run dist:linux
 
 ## Configuration
 
-Settings are stored in `~/.config/puppy/config.json`. The file is created automatically with defaults on first launch.
+Settings are stored in `~/.config/paw/config.json`. The file is created automatically with defaults on first launch.
 
 ### Default Config
 

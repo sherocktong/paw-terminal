@@ -160,11 +160,11 @@ export class CopyMode {
         this.state.cursor.col = Math.max(0, this.getLineLength(this.state.cursor.line) - 1);
         break;
       case 'moveFirstLine':
-        this.state.cursor.line = 0;
+        this.state.cursor.line = Math.max(0, Math.min(count - 1, this.state.bufferLines.length - 1));
         this.state.cursor.col = 0;
         break;
       case 'moveLastLine':
-        this.state.cursor.line = Math.max(0, this.state.bufferLines.length - 1);
+        this.state.cursor.line = Math.max(0, Math.min(count - 1, this.state.bufferLines.length - 1));
         break;
       case 'moveScreenTop':
         this.state.cursor.line = 0;
