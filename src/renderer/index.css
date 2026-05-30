@@ -128,6 +128,16 @@ body {
   left: 0;
 }
 
+.tab-terminal-container.drag-over::after {
+  content: '';
+  position: absolute;
+  inset: 4px;
+  border: 2px dashed var(--tab-active-bg, #6272a4);
+  border-radius: 6px;
+  pointer-events: none;
+  z-index: 50;
+}
+
 .xterm {
   padding: 4px;
 }

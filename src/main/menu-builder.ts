@@ -106,6 +106,7 @@ export function buildMenu(): Menu {
         { type: 'separator' },
         {
           label: 'Zoom Window',
+          accelerator: 'CmdOrCtrl+Alt+Z',
           click: (_item, focusedWindow) => {
             if (focusedWindow) {
               if (focusedWindow.isMaximized()) {

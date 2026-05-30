@@ -48,6 +48,7 @@ export class TabManager {
     this.setupKeyboardShortcuts();
     this.setupResizeObserver();
     this.startCwdPolling();
+    this.setupGlobalDragOver();
   }
 
   async addTab(): Promise<void> {
@@ -69,6 +70,7 @@ export class TabManager {
     container.style.height = '100%';
     container.style.display = 'none';
     this.terminalContainer.appendChild(container);
+    this.setupDragAndDrop(container);
 
     const term = initializeTerminal(container, this.config);
     const fitAddon = new FitAddon();
@@ -368,8 +370,8 @@ export class TabManager {
         return;
       }
 
-      // Cmd/Ctrl+Shift+Z: Toggle window maximize (zoom)
-      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === 'z') {
+      // Cmd/Ctrl+Option/Alt+Z: Toggle window maximize (zoom)
+      if ((e.metaKey || e.ctrlKey) && e.altKey && e.key.toLowerCase() === 'z') {
         e.preventDefault();
         window.puppy.window.toggleMaximize();
         return;
@@ -412,6 +414,75 @@ export class TabManager {
       }
     });
     this.resizeObserver.observe(this.terminalContainer);
+  }
+
+  private setupGlobalDragOver(): void {
+    document.addEventListener('dragover', (e) => {
+      e.preventDefault();
+    });
+  }
+
+  private setupDragAndDrop(container: HTMLElement): void {
+    let dragCounter = 0;
+
+    container.addEventListener('dragenter', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      dragCounter++;
+      if (dragCounter === 1) {
+        container.classList.add('drag-over');
+      }
+    });
+
+    container.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      e.dataTransfer!.dropEffect = 'copy';
+    });
+
+    container.addEventListener('dragleave', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      dragCounter--;
+      if (dragCounter === 0) {
+        container.classList.remove('drag-over');
+      }
+    });
+
+    container.addEventListener('drop', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      dragCounter = 0;
+      container.classList.remove('drag-over');
+
+      const files = e.dataTransfer?.files;
+      if (!files || files.length === 0) return;
+
+      const tab = this.tabs.find((t) => t.container === container);
+      if (!tab) return;
+
+      if (tab.copyMode.isActive()) {
+        tab.copyMode.exit();
+      }
+
+      const paths: string[] = [];
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        try {
+          const path = window.puppy.webUtils.getPathForFile(file);
+          if (path) {
+            paths.push(path.replace(/ /g, '\\ '));
+          }
+        } catch {
+          // Ignore files without a path
+        }
+      }
+
+      if (paths.length === 0) return;
+
+      const text = paths.join(' ') + ' ';
+      window.puppy.shell.write(tab.id, text);
+    });
   }
 
   private startCwdPolling(): void {
