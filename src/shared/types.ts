@@ -49,8 +49,8 @@ export interface WindowState {
 }
 
 export interface Config {
-  theme: string;
-  autoAppearance: boolean;
+  lightTheme: string;
+  darkTheme: string;
   scrollback: number;
   font: {
     family: string;

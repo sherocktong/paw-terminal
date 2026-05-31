@@ -1,5 +1,4 @@
-import type { CopyModeState, CopyModePosition, Theme } from '../../shared/types';
-import { BUILTIN_THEMES } from '../../shared/constants';
+import type { Config, CopyModeState, CopyModePosition, Theme } from '../../shared/types';
 
 export class VisualRenderer {
   private container: HTMLElement;
@@ -8,15 +7,20 @@ export class VisualRenderer {
   private searchInput: HTMLInputElement | null = null;
   private lineElements: HTMLElement[] = [];
   private theme: Theme;
+  private font: Config['font'];
 
-  constructor(container: HTMLElement, themeId: string) {
+  constructor(container: HTMLElement, theme: Theme, font: Config['font']) {
     this.container = container;
-    this.theme = BUILTIN_THEMES.find((t) => t.id === themeId) as Theme || BUILTIN_THEMES[0] as Theme;
+    this.theme = theme;
+    this.font = font;
   }
 
-  setTheme(themeId: string): void {
-    const t = BUILTIN_THEMES.find((th) => th.id === themeId) as Theme;
-    if (t) this.theme = t;
+  setTheme(theme: Theme): void {
+    this.theme = theme;
+  }
+
+  setFont(font: Config['font']): void {
+    this.font = font;
   }
 
   render(state: CopyModeState): void {
@@ -30,6 +34,9 @@ export class VisualRenderer {
     }
 
     if (this.overlay) {
+      this.overlay.style.fontFamily = this.font.family;
+      this.overlay.style.fontSize = `${this.font.size}px`;
+      this.overlay.style.lineHeight = `${this.font.lineHeight}`;
       this.overlay.innerHTML = '';
       this.lineElements = [];
 
@@ -110,9 +117,9 @@ export class VisualRenderer {
   private createOverlay(): void {
     this.overlay = document.createElement('div');
     this.overlay.className = 'copy-mode-overlay';
-    this.overlay.style.fontFamily = this.theme.font?.family || 'monospace';
-    this.overlay.style.fontSize = `${this.theme.font?.size || 14}px`;
-    this.overlay.style.lineHeight = `${this.theme.font?.lineHeight || 1.2}`;
+    this.overlay.style.fontFamily = this.font.family;
+    this.overlay.style.fontSize = `${this.font.size}px`;
+    this.overlay.style.lineHeight = `${this.font.lineHeight}`;
     this.container.appendChild(this.overlay);
 
     this.statusBar = document.createElement('div');
@@ -248,14 +255,11 @@ export class VisualRenderer {
   }
 
   private getCharWidth(): number {
-    const size = this.theme.font?.size || 14;
-    return size * 0.6; // rough monospace estimate
+    return this.font.size; // rough monospace estimate
   }
 
   private getLineHeight(): number {
-    const size = this.theme.font?.size || 14;
-    const lh = this.theme.font?.lineHeight || 1.2;
-    return size * lh;
+    return this.font.size * this.font.lineHeight;
   }
 
   private escapeHtml(text: string): string {

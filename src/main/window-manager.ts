@@ -1,14 +1,19 @@
 import { BrowserWindow, nativeTheme } from 'electron';
 import path from 'path';
+import { BUILTIN_THEMES } from '../shared/constants';
 import type { Config, AppearanceMode, WindowState } from '../shared/types';
 
 function getInitialBackgroundColor(config: Config): string {
-  const lightThemes = ['solarized-light'];
-  const isLight = lightThemes.includes(config.theme);
-  if (config.theme === 'auto' || config.theme === 'system') {
-    return nativeTheme.shouldUseDarkColors ? '#282a36' : '#fdf6e3';
-  }
-  return isLight ? '#fdf6e3' : '#282a36';
+  const isDark = nativeTheme.shouldUseDarkColors;
+  const themeId = isDark ? config.darkTheme : config.lightTheme;
+
+  const custom = config.customThemes.find((t) => t.id === themeId);
+  if (custom) return custom.colors.background;
+
+  const builtin = BUILTIN_THEMES.find((t) => t.id === themeId);
+  if (builtin) return builtin.colors.background;
+
+  return isDark ? '#282a36' : '#e5e5e5';
 }
 
 const isMac = process.platform === 'darwin';
@@ -50,9 +55,22 @@ export function createWindow(config: Config): BrowserWindow {
   return win;
 }
 
-export function applyAppearance(win: BrowserWindow, mode: AppearanceMode): void {
-  const bg = mode === 'dark' ? '#282a36' : '#fdf6e3';
-  win.setBackgroundColor(bg);
+export function applyAppearance(win: BrowserWindow, mode: AppearanceMode, config: Config): void {
+  const themeId = mode === 'dark' ? config.darkTheme : config.lightTheme;
+
+  const custom = config.customThemes.find((t) => t.id === themeId);
+  if (custom) {
+    win.setBackgroundColor(custom.colors.background);
+    return;
+  }
+
+  const builtin = BUILTIN_THEMES.find((t) => t.id === themeId);
+  if (builtin) {
+    win.setBackgroundColor(builtin.colors.background);
+    return;
+  }
+
+  win.setBackgroundColor(mode === 'dark' ? '#282a36' : '#e5e5e5');
 }
 
 export function getCurrentWindowState(win: BrowserWindow): WindowState {

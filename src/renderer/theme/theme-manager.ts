@@ -6,12 +6,13 @@ export class ThemeManager {
   private terms = new Set<Terminal>();
   private config: Config;
   private currentTheme: Theme;
-  private systemMode: AppearanceMode = 'dark';
+  private systemMode: AppearanceMode = 'light';
   private unsubscribeSystem: (() => void) | null = null;
 
   constructor(config: Config) {
     this.config = config;
-    this.currentTheme = this.resolveTheme(config.theme);
+    // Default to light until async setup resolves the real system mode
+    this.currentTheme = this.resolveThemeForMode(this.systemMode);
     this.applyGlobalStyles(this.currentTheme);
     this.setupSystemAppearance();
     this.setupViewportObserver();
@@ -28,7 +29,7 @@ export class ThemeManager {
 
   updateConfig(config: Config): void {
     this.config = config;
-    const newTheme = this.resolveTheme(config.theme);
+    const newTheme = this.resolveThemeForMode(this.systemMode);
     if (newTheme.id !== this.currentTheme.id) {
       this.currentTheme = newTheme;
       this.applyTheme(this.currentTheme);
@@ -39,26 +40,14 @@ export class ThemeManager {
     return this.currentTheme;
   }
 
-  private resolveTheme(themeId: string): Theme {
-    // Auto theme: pick a built-in theme matching the current system appearance
-    if (themeId === 'auto' || (themeId === 'system' && this.config.autoAppearance)) {
-      const fallback = BUILTIN_THEMES.find((t) => t.type === this.systemMode);
-      if (fallback) return fallback as Theme;
-      return BUILTIN_THEMES[0] as Theme;
-    }
+  private resolveThemeForMode(mode: AppearanceMode): Theme {
+    const themeId = mode === 'dark' ? this.config.darkTheme : this.config.lightTheme;
 
     const custom = this.config.customThemes.find((t) => t.id === themeId);
     if (custom) return custom;
+
     const builtin = BUILTIN_THEMES.find((t) => t.id === themeId);
     if (builtin) return builtin as Theme;
-
-    // Fallback: auto-select based on system appearance
-    if (this.config.autoAppearance) {
-      const fallback = BUILTIN_THEMES.find(
-        (t) => t.type === this.systemMode
-      );
-      if (fallback) return fallback as Theme;
-    }
 
     return BUILTIN_THEMES[0] as Theme;
   }
@@ -140,15 +129,20 @@ export class ThemeManager {
   }
 
   private async setupSystemAppearance(): Promise<void> {
-    this.systemMode = await window.puppy.theme.getSystem();
+    const initialMode = await window.puppy.theme.getSystem();
+    this.systemMode = initialMode;
+    const initialTheme = this.resolveThemeForMode(initialMode);
+    if (initialTheme.id !== this.currentTheme.id) {
+      this.currentTheme = initialTheme;
+      this.applyTheme(this.currentTheme);
+    }
+
     this.unsubscribeSystem = window.puppy.theme.onSystemChange((mode) => {
       this.systemMode = mode;
-      if (this.config.autoAppearance) {
-        const autoTheme = BUILTIN_THEMES.find((t) => t.type === mode);
-        if (autoTheme) {
-          this.currentTheme = autoTheme as Theme;
-          this.applyTheme(this.currentTheme);
-        }
+      const newTheme = this.resolveThemeForMode(mode);
+      if (newTheme.id !== this.currentTheme.id) {
+        this.currentTheme = newTheme;
+        this.applyTheme(this.currentTheme);
       }
     });
   }

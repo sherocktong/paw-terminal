@@ -1,7 +1,7 @@
 import { app } from 'electron';
 import fs from 'fs';
 import path from 'path';
-import { CONFIG_DIR_NAME, CONFIG_FILE_NAME, DEFAULT_CONFIG } from '../shared/constants';
+import { CONFIG_DIR_NAME, CONFIG_FILE_NAME, DEFAULT_CONFIG, BUILTIN_THEMES } from '../shared/constants';
 import type { Config } from '../shared/types';
 
 function getConfigDir(): string {
@@ -97,11 +97,57 @@ function migrateOldCopyMode(partial: Partial<Config>): Partial<Config> {
   return partial;
 }
 
+function migrateOldThemeConfig(partial: Partial<Config>): Partial<Config> {
+  if (!('theme' in partial) && !('autoAppearance' in partial)) {
+    return partial;
+  }
+
+  const result = { ...partial };
+  delete (result as any).theme;
+  delete (result as any).autoAppearance;
+
+  const oldTheme = partial.theme;
+  if (oldTheme === 'auto' || oldTheme === 'system' || !oldTheme) {
+    result.lightTheme = DEFAULT_CONFIG.lightTheme;
+    result.darkTheme = DEFAULT_CONFIG.darkTheme;
+    return result;
+  }
+
+  const builtin = BUILTIN_THEMES.find((t) => t.id === oldTheme);
+  if (builtin) {
+    if (builtin.type === 'light') {
+      result.lightTheme = oldTheme;
+      result.darkTheme = DEFAULT_CONFIG.darkTheme;
+    } else {
+      result.darkTheme = oldTheme;
+      result.lightTheme = DEFAULT_CONFIG.lightTheme;
+    }
+    return result;
+  }
+
+  const custom = partial.customThemes?.find((t) => t.id === oldTheme);
+  if (custom) {
+    if (custom.type === 'light') {
+      result.lightTheme = oldTheme;
+      result.darkTheme = DEFAULT_CONFIG.darkTheme;
+    } else {
+      result.darkTheme = oldTheme;
+      result.lightTheme = DEFAULT_CONFIG.lightTheme;
+    }
+    return result;
+  }
+
+  result.lightTheme = DEFAULT_CONFIG.lightTheme;
+  result.darkTheme = DEFAULT_CONFIG.darkTheme;
+  return result;
+}
+
 function mergeWithDefaults(partial: Partial<Config>): Config {
   const migrated = migrateOldCopyMode(partial);
+  const migratedTheme = migrateOldThemeConfig(migrated);
   return {
-    theme: migrated.theme ?? DEFAULT_CONFIG.theme,
-    autoAppearance: migrated.autoAppearance ?? DEFAULT_CONFIG.autoAppearance,
+    lightTheme: migratedTheme.lightTheme ?? DEFAULT_CONFIG.lightTheme,
+    darkTheme: migratedTheme.darkTheme ?? DEFAULT_CONFIG.darkTheme,
     scrollback: migrated.scrollback ?? DEFAULT_CONFIG.scrollback,
     font: {
       family: migrated.font?.family ?? DEFAULT_CONFIG.font.family,

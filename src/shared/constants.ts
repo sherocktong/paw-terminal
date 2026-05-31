@@ -23,12 +23,12 @@ export const IPC_CHANNELS = {
 } as const;
 
 export const DEFAULT_CONFIG: Config = {
-  theme: 'auto',
-  autoAppearance: true,
+  lightTheme: 'macos-terminal',
+  darkTheme: 'dracula',
   scrollback: 10000,
   font: {
-    family: 'Menlo, Monaco, "Courier New", monospace',
-    size: 14,
+    family: 'SFMono-Regular, Menlo, Monaco, "Courier New", monospace',
+    size: 11,
     lineHeight: 1.2,
   },
   opacity: 1.0,
@@ -49,6 +49,35 @@ export const DEFAULT_CONFIG: Config = {
 };
 
 export const BUILTIN_THEMES = [
+  {
+    id: 'macos-terminal',
+    name: 'macOS Terminal',
+    type: 'light',
+    colors: {
+      background: '#e5e5e5',
+      foreground: '#000000',
+      cursor: '#000000',
+      cursorAccent: '#e5e5e5',
+      selectionBackground: '#b4d7ff',
+      selectionForeground: '#000000',
+      black: '#000000',
+      red: '#990000',
+      green: '#00a600',
+      yellow: '#999900',
+      blue: '#0000b2',
+      magenta: '#b200b2',
+      cyan: '#00a6b2',
+      white: '#bfbfbf',
+      brightBlack: '#666666',
+      brightRed: '#e50000',
+      brightGreen: '#00d900',
+      brightYellow: '#e5e500',
+      brightBlue: '#0000ff',
+      brightMagenta: '#e500e5',
+      brightCyan: '#00e5e5',
+      brightWhite: '#e5e5e5',
+    },
+  },
   {
     id: 'dracula',
     name: 'Dracula',

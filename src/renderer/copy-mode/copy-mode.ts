@@ -1,6 +1,5 @@
 import { Terminal } from '@xterm/xterm';
 import type { Config, CopyModeState, CopyModePosition, CopyModeSubMode, Theme } from '../../shared/types';
-import { BUILTIN_THEMES } from '../../shared/constants';
 import { captureBuffer } from './buffer-capture';
 import { KeyHandler, type ParsedCommand } from './key-handler';
 import { searchBuffer, type SearchResult } from './search';
@@ -24,13 +23,17 @@ export class CopyMode {
     this.container = container;
     this.config = config;
     this.themeManager = themeManager;
-    this.renderer = new VisualRenderer(container, config.theme);
+    this.renderer = new VisualRenderer(container, themeManager.getCurrentTheme(), config.font);
     this.state = this.createInitialState();
   }
 
   updateConfig(config: Config): void {
     this.config = config;
-    this.renderer.setTheme(config.theme);
+    this.renderer.setTheme(this.themeManager.getCurrentTheme());
+    this.renderer.setFont(config.font);
+    if (this.state.active) {
+      this.renderer.render(this.state);
+    }
   }
 
   isActive(): boolean {
