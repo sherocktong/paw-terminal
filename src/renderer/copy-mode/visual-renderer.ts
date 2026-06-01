@@ -8,6 +8,8 @@ export class VisualRenderer {
   private lineElements: HTMLElement[] = [];
   private theme: Theme;
   private font: Config['font'];
+  private cachedCharWidth: number | null = null;
+  private lastBufferLines: string[] = [];
 
   constructor(container: HTMLElement, theme: Theme, font: Config['font']) {
     this.container = container;
@@ -21,6 +23,7 @@ export class VisualRenderer {
 
   setFont(font: Config['font']): void {
     this.font = font;
+    this.cachedCharWidth = null;
   }
 
   render(state: CopyModeState): void {
@@ -33,82 +36,119 @@ export class VisualRenderer {
       this.createOverlay();
     }
 
-    if (this.overlay) {
-      this.overlay.style.fontFamily = this.font.family;
-      this.overlay.style.fontSize = `${this.font.size}px`;
-      this.overlay.style.lineHeight = `${this.font.lineHeight}`;
+    if (!this.overlay) return;
+
+    this.overlay.style.fontFamily = this.font.family;
+    this.overlay.style.fontSize = `${this.font.size}px`;
+    this.overlay.style.lineHeight = `${this.font.lineHeight}`;
+
+    const gutterWidth = this.getGutterWidth(state.bufferLines.length);
+    const bufferChanged = this.lastBufferLines.length !== state.bufferLines.length ||
+      this.lastBufferLines.some((text, i) => text !== state.bufferLines[i]);
+
+    if (bufferChanged) {
+      // Full rebuild: buffer content changed
       this.overlay.innerHTML = '';
       this.lineElements = [];
-
-      const gutterWidth = this.getGutterWidth(state.bufferLines.length);
+      this.cachedCharWidth = null;
 
       for (let i = 0; i < state.bufferLines.length; i++) {
         const rowEl = document.createElement('div');
         rowEl.className = 'copy-mode-row';
         rowEl.style.display = 'flex';
 
-        // Relative line number
-        const isCurrent = i === state.cursor.line;
-        const relNum = isCurrent
-          ? i + 1  // absolute line number at cursor
-          : Math.abs(i - state.cursor.line);
-        const numText = String(relNum).padStart(gutterWidth, ' ');
-
         const numEl = document.createElement('span');
-        numEl.className = 'copy-mode-linenr' + (isCurrent ? ' current' : '');
-        numEl.textContent = numText;
+        numEl.className = 'copy-mode-linenr';
         rowEl.appendChild(numEl);
 
         const lineEl = document.createElement('span');
         lineEl.className = 'copy-mode-line';
-        const text = state.bufferLines[i] || '';
-        lineEl.innerHTML = this.buildLineHtml(text, i, state);
         rowEl.appendChild(lineEl);
+
         this.overlay.appendChild(rowEl);
         this.lineElements.push(rowEl);
       }
 
-      // Position cursor using actual DOM measurements for accuracy
-      const cursorEl = document.createElement('div');
-      cursorEl.className = 'copy-mode-cursor';
+      this.lastBufferLines = state.bufferLines.slice();
+    }
 
-      const targetLine = Math.min(state.cursor.line, this.lineElements.length - 1);
-      const targetRow = this.lineElements[targetLine];
-      const targetText = targetRow?.querySelector('.copy-mode-line') as HTMLElement | null;
+    // Update line numbers and selection for all rows
+    for (let i = 0; i < state.bufferLines.length; i++) {
+      const rowEl = this.lineElements[i];
+      if (!rowEl) continue;
 
-      if (targetRow && targetText && this.overlay) {
-        const overlayRect = this.overlay.getBoundingClientRect();
-        const textRect = targetText.getBoundingClientRect();
-        const rowRect = targetRow.getBoundingClientRect();
+      const numEl = rowEl.querySelector('.copy-mode-linenr') as HTMLElement | null;
+      const lineEl = rowEl.querySelector('.copy-mode-line') as HTMLElement | null;
+      if (!numEl || !lineEl) continue;
 
-        const textLeft = textRect.left - overlayRect.left;
-        const rowTop = rowRect.top - overlayRect.top;
-        const rowHeight = rowRect.height;
+      const isCurrent = i === state.cursor.line;
+      const relNum = isCurrent
+        ? i + 1
+        : Math.abs(i - state.cursor.line);
+      const numText = String(relNum).padStart(gutterWidth, ' ');
 
-        // Measure char width from first row's text for consistency
+      numEl.textContent = numText;
+      numEl.className = 'copy-mode-linenr' + (isCurrent ? ' current' : '');
+
+      const text = state.bufferLines[i] || '';
+      lineEl.innerHTML = this.buildLineHtml(text, i, state);
+    }
+
+    // Remove old cursor and create new one
+    const oldCursor = this.overlay.querySelector('.copy-mode-cursor');
+    if (oldCursor) oldCursor.remove();
+
+    const cursorEl = document.createElement('div');
+    cursorEl.className = 'copy-mode-cursor';
+
+    const targetLine = Math.min(state.cursor.line, this.lineElements.length - 1);
+    const targetRow = this.lineElements[targetLine];
+    const targetText = targetRow?.querySelector('.copy-mode-line') as HTMLElement | null;
+
+    let cursorTop = 0;
+    let cursorHeight = this.getLineHeight();
+
+    if (targetRow && targetText && this.overlay) {
+      // Use offsetTop/offsetHeight instead of getBoundingClientRect() because
+      // the latter returns viewport-relative coordinates that break when rows
+      // are scrolled far outside the visible area.
+      cursorTop = targetRow.offsetTop;
+      cursorHeight = targetRow.offsetHeight;
+
+      if (this.cachedCharWidth === null) {
         const firstText = this.lineElements[0]?.querySelector('.copy-mode-line') as HTMLElement | null;
-        let charWidth = this.getCharWidth();
-        if (firstText) {
-          const firstRect = firstText.getBoundingClientRect();
-          const firstContent = firstText.textContent || ' ';
-          charWidth = firstRect.width / Math.max(1, firstContent.length);
+        if (firstText && firstText.textContent) {
+          this.cachedCharWidth = firstText.offsetWidth / Math.max(1, firstText.textContent.length);
+        } else {
+          this.cachedCharWidth = this.getCharWidth();
         }
-
-        cursorEl.style.left = `${textLeft + state.cursor.col * charWidth}px`;
-        cursorEl.style.top = `${rowTop}px`;
-        cursorEl.style.height = `${rowHeight}px`;
-      } else {
-        // Fallback to estimates
-        const charWidth = this.getCharWidth();
-        const lineHeight = this.getLineHeight();
-        const gutterPx = (gutterWidth + 1) * charWidth + 8;
-        cursorEl.style.left = `${gutterPx + state.cursor.col * charWidth}px`;
-        cursorEl.style.top = `${state.cursor.line * lineHeight}px`;
       }
-      this.overlay.appendChild(cursorEl);
 
-      // Scroll cursor into view
-      cursorEl.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+      cursorEl.style.left = `${targetText.offsetLeft + state.cursor.col * this.cachedCharWidth}px`;
+      cursorEl.style.top = `${cursorTop}px`;
+      cursorEl.style.height = `${cursorHeight}px`;
+    } else {
+      const charWidth = this.cachedCharWidth ?? this.getCharWidth();
+      const lineHeight = this.getLineHeight();
+      const gutterPx = (gutterWidth + 1) * charWidth + 8;
+      cursorEl.style.left = `${gutterPx + state.cursor.col * charWidth}px`;
+      cursorTop = state.cursor.line * lineHeight;
+      cursorEl.style.top = `${cursorTop}px`;
+      cursorHeight = lineHeight;
+    }
+
+    this.overlay.appendChild(cursorEl);
+
+    // Explicit scroll management: keep cursor in view
+    // Account for the status bar that overlays the bottom of the container
+    const statusBarHeight = this.statusBar?.offsetHeight ?? 24;
+    const visibleTop = this.overlay.scrollTop;
+    const visibleBottom = visibleTop + this.overlay.clientHeight - statusBarHeight;
+
+    if (cursorTop < visibleTop) {
+      this.overlay.scrollTop = cursorTop;
+    } else if (cursorTop + cursorHeight > visibleBottom) {
+      this.overlay.scrollTop = cursorTop + cursorHeight - (this.overlay.clientHeight - statusBarHeight);
     }
 
     this.updateStatusBar(state);
@@ -242,6 +282,8 @@ export class VisualRenderer {
       this.searchInput = null;
     }
     this.lineElements = [];
+    this.cachedCharWidth = null;
+    this.lastBufferLines = [];
   }
 
   focus(): void {

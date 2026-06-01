@@ -80,6 +80,12 @@ export class TabManager {
 
     const copyMode = new CopyMode(term, container, this.config, this.themeManager);
 
+    // Prevent xterm.js from sending keys to the PTY while copy mode is active,
+    // so TUI apps (e.g. Claude Code) don't also receive hjkl/G/etc.
+    term.attachCustomKeyEventHandler(() => {
+      return !copyMode.isActive();
+    });
+
     // Send input to pty (keyboard / drop / paste → shell)
     const inputDisposable = term.onData((data) => {
       window.puppy.shell.write(id, data);

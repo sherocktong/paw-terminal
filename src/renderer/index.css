@@ -159,6 +159,7 @@ body {
   font-size: 14px;
   line-height: 1.2;
   padding: 4px;
+  padding-bottom: 28px;
   background: var(--copy-mode-bg, #282a36);
   color: var(--copy-mode-fg, #f8f8f2);
   z-index: 100;
