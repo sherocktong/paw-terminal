@@ -229,6 +229,8 @@ export const COPY_MODE_COMMANDS = [
   'moveLeft', 'moveRight', 'moveDown', 'moveUp',
   'moveWordForward', 'moveWordBackward',
   'moveWordForwardBig', 'moveWordBackwardBig',
+  'moveWordEndForward', 'moveWordEndForwardBig',
+  'moveWordEndBackward', 'moveWordEndBackwardBig',
   'moveLineStart', 'moveLineStartNonBlank', 'moveLineEnd',
   'moveFirstLine', 'moveLastLine', 'moveScreenTop', 'moveScreenMiddle', 'moveScreenBottom',
   'scrollHalfPageDown', 'scrollHalfPageUp', 'scrollPageDown', 'scrollPageUp',

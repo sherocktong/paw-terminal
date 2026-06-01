@@ -45,6 +45,16 @@ export class KeyHandler {
       return { command: 'moveFirstLine', count: this.pendingOperatorCount * count };
     }
 
+    // ge / gE → end of previous word
+    if (key === 'e' && !shift && !ctrl && this.pendingOperator === 'g') {
+      this.pendingOperator = '';
+      return { command: 'moveWordEndBackward', count: this.pendingOperatorCount * count };
+    }
+    if (key === 'E' && shift && !ctrl && this.pendingOperator === 'g') {
+      this.pendingOperator = '';
+      return { command: 'moveWordEndBackwardBig', count: this.pendingOperatorCount * count };
+    }
+
     // Text object: y i/a w
     if (this.pendingOperator === 'y' && this.pendingTextObjectQualifier && key === 'w' && !shift && !ctrl && !alt) {
       const textObject = this.pendingTextObjectQualifier + 'w';
@@ -94,10 +104,10 @@ export class KeyHandler {
       return { command: 'moveWordBackwardBig', count };
     }
     if (key === 'e' && !shift) {
-      return { command: 'moveWordForward', count }; // end of word - simplify for now
+      return { command: 'moveWordEndForward', count };
     }
     if (key === 'E' && shift) {
-      return { command: 'moveWordForwardBig', count };
+      return { command: 'moveWordEndForwardBig', count };
     }
 
     if (key === '0') {

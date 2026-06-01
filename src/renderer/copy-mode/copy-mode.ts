@@ -160,6 +160,18 @@ export class CopyMode {
       case 'moveWordBackwardBig':
         this.moveWordBackward(count, true);
         break;
+      case 'moveWordEndForward':
+        this.moveWordEndForward(count, false);
+        break;
+      case 'moveWordEndForwardBig':
+        this.moveWordEndForward(count, true);
+        break;
+      case 'moveWordEndBackward':
+        this.moveWordEndBackward(count, false);
+        break;
+      case 'moveWordEndBackwardBig':
+        this.moveWordEndBackward(count, true);
+        break;
       case 'moveLineStart':
         this.state.cursor.col = 0;
         break;
@@ -263,61 +275,227 @@ export class CopyMode {
     return 0;
   }
 
+  private getCharType(char: string, bigWord: boolean): 'word' | 'nonword' | 'space' {
+    if (char === ' ' || char === '\t') return 'space';
+    if (bigWord) return 'nonword';
+    return /[a-zA-Z0-9_]/.test(char) ? 'word' : 'nonword';
+  }
+
   private moveWordForward(count: number, bigWord: boolean): void {
     for (let i = 0; i < count; i++) {
-      const text = this.state.bufferLines[this.state.cursor.line] || '';
+      let line = this.state.cursor.line;
       let col = this.state.cursor.col;
 
-      if (col >= text.length - 1) {
-        if (this.state.cursor.line < this.state.bufferLines.length - 1) {
-          this.state.cursor.line++;
-          this.state.cursor.col = 0;
+      while (true) {
+        const text = this.state.bufferLines[line] || '';
+        const len = text.length;
+
+        if (len === 0) {
+          line++;
+          if (line >= this.state.bufferLines.length) {
+            this.state.cursor.line = Math.max(0, this.state.bufferLines.length - 1);
+            this.state.cursor.col = 0;
+            break;
+          }
+          col = 0;
+          continue;
         }
-        continue;
-      }
 
-      col++;
-      const wordChars = bigWord ? /\S/ : /[a-zA-Z0-9_]/;
-
-      // Skip current word
-      while (col < text.length && wordChars.test(text[col])) {
         col++;
-      }
-      // Skip whitespace/non-word
-      while (col < text.length && !wordChars.test(text[col])) {
-        col++;
-      }
 
-      this.state.cursor.col = col;
+        while (true) {
+          if (col >= len) {
+            line++;
+            if (line >= this.state.bufferLines.length) {
+              this.state.cursor.line = Math.max(0, this.state.bufferLines.length - 1);
+              this.state.cursor.col = Math.max(0, this.getLineLength(this.state.cursor.line) - 1);
+              break;
+            }
+            col = 0;
+            break;
+          }
+
+          const type = this.getCharType(text[col], bigWord);
+          if (type !== 'space') {
+            const prevType = col > 0 ? this.getCharType(text[col - 1], bigWord) : 'space';
+            if (prevType === 'space' || prevType !== type) {
+              this.state.cursor.line = line;
+              this.state.cursor.col = col;
+              break;
+            }
+          }
+          col++;
+        }
+
+        if (this.state.cursor.line === line && this.state.cursor.col === col) {
+          break;
+        }
+      }
     }
   }
 
   private moveWordBackward(count: number, bigWord: boolean): void {
     for (let i = 0; i < count; i++) {
-      const text = this.state.bufferLines[this.state.cursor.line] || '';
+      let line = this.state.cursor.line;
       let col = this.state.cursor.col;
 
-      if (col <= 0) {
-        if (this.state.cursor.line > 0) {
-          this.state.cursor.line--;
-          this.state.cursor.col = Math.max(0, this.getLineLength(this.state.cursor.line) - 1);
+      while (true) {
+        const text = this.state.bufferLines[line] || '';
+        const len = text.length;
+
+        if (len === 0 || col <= 0) {
+          line--;
+          if (line < 0) {
+            this.state.cursor.line = 0;
+            this.state.cursor.col = 0;
+            break;
+          }
+          col = Math.max(0, this.getLineLength(line) - 1);
+          continue;
         }
-        continue;
+
+        col--;
+
+        while (col >= 0 && this.getCharType(text[col], bigWord) === 'space') {
+          col--;
+        }
+
+        if (col < 0) {
+          line--;
+          if (line < 0) {
+            this.state.cursor.line = 0;
+            this.state.cursor.col = 0;
+            break;
+          }
+          col = Math.max(0, this.getLineLength(line) - 1);
+          continue;
+        }
+
+        const type = this.getCharType(text[col], bigWord);
+        while (col > 0 && this.getCharType(text[col - 1], bigWord) === type) {
+          col--;
+        }
+
+        this.state.cursor.line = line;
+        this.state.cursor.col = col;
+        break;
       }
+    }
+  }
 
-      col--;
-      const wordChars = bigWord ? /\S/ : /[a-zA-Z0-9_]/;
+  private moveWordEndForward(count: number, bigWord: boolean): void {
+    for (let i = 0; i < count; i++) {
+      let line = this.state.cursor.line;
+      let col = this.state.cursor.col;
 
-      // Skip whitespace/non-word
-      while (col > 0 && !wordChars.test(text[col])) {
+      while (true) {
+        const text = this.state.bufferLines[line] || '';
+        const len = text.length;
+
+        if (len === 0) {
+          line++;
+          if (line >= this.state.bufferLines.length) {
+            this.state.cursor.line = Math.max(0, this.state.bufferLines.length - 1);
+            this.state.cursor.col = 0;
+            break;
+          }
+          col = 0;
+          continue;
+        }
+
+        const atEndOfWord = col >= len - 1 ||
+          this.getCharType(text[col + 1], bigWord) === 'space' ||
+          this.getCharType(text[col], bigWord) !== this.getCharType(text[col + 1], bigWord);
+
+        if (atEndOfWord) {
+          let scanCol = col + 1;
+          while (scanCol < len && this.getCharType(text[scanCol], bigWord) === 'space') {
+            scanCol++;
+          }
+
+          if (scanCol < len) {
+            const type = this.getCharType(text[scanCol], bigWord);
+            col = scanCol;
+            while (col < len && this.getCharType(text[col], bigWord) === type) {
+              col++;
+            }
+            this.state.cursor.line = line;
+            this.state.cursor.col = col - 1;
+            break;
+          }
+
+          line++;
+          if (line >= this.state.bufferLines.length) {
+            this.state.cursor.line = Math.max(0, this.state.bufferLines.length - 1);
+            this.state.cursor.col = Math.max(0, this.getLineLength(this.state.cursor.line) - 1);
+            break;
+          }
+          col = 0;
+          continue;
+        } else {
+          const type = this.getCharType(text[col], bigWord);
+          while (col < len && this.getCharType(text[col], bigWord) === type) {
+            col++;
+          }
+          this.state.cursor.line = line;
+          this.state.cursor.col = col - 1;
+          break;
+        }
+      }
+    }
+  }
+
+  private moveWordEndBackward(count: number, bigWord: boolean): void {
+    for (let i = 0; i < count; i++) {
+      let line = this.state.cursor.line;
+      let col = this.state.cursor.col;
+
+      while (true) {
+        const text = this.state.bufferLines[line] || '';
+        const len = text.length;
+
+        if (len === 0 || col <= 0) {
+          line--;
+          if (line < 0) {
+            this.state.cursor.line = 0;
+            this.state.cursor.col = 0;
+            break;
+          }
+          col = Math.max(0, this.getLineLength(line) - 1);
+          continue;
+        }
+
+        col--;
+
+        while (col >= 0 && this.getCharType(text[col], bigWord) === 'space') {
+          col--;
+        }
+
+        if (col < 0) {
+          line--;
+          if (line < 0) {
+            this.state.cursor.line = 0;
+            this.state.cursor.col = 0;
+            break;
+          }
+          col = Math.max(0, this.getLineLength(line) - 1);
+          continue;
+        }
+
+        const type = this.getCharType(text[col], bigWord);
+        const nextType = col < len - 1 ? this.getCharType(text[col + 1], bigWord) : 'space';
+        if (nextType === 'space' || nextType !== type) {
+          this.state.cursor.line = line;
+          this.state.cursor.col = col;
+          break;
+        }
+
+        while (col > 0 && this.getCharType(text[col - 1], bigWord) === type) {
+          col--;
+        }
+
         col--;
       }
-      // Skip current word
-      while (col > 0 && wordChars.test(text[col - 1])) {
-        col--;
-      }
-
-      this.state.cursor.col = col;
     }
   }
 
@@ -365,23 +543,24 @@ export class CopyMode {
     const text = this.state.bufferLines[line] || '';
     const col = Math.min(this.state.cursor.col, text.length - 1);
 
-    const wordChars = /[a-zA-Z0-9_]/;
-
-    // Find start of word (first word char at or before cursor)
+    // Find start of word (first char of word at or before cursor)
     let startCol = col;
-    while (startCol > 0 && wordChars.test(text[startCol - 1])) {
-      startCol--;
-    }
-    // If cursor is on non-word char, scan forward to find word start
-    if (!wordChars.test(text[startCol])) {
-      while (startCol < text.length && !wordChars.test(text[startCol])) {
+    const startType = this.getCharType(text[startCol], false);
+    if (startType === 'space') {
+      // If on whitespace, scan forward to find word start
+      while (startCol < text.length && this.getCharType(text[startCol], false) === 'space') {
         startCol++;
+      }
+    } else {
+      while (startCol > 0 && this.getCharType(text[startCol - 1], false) === startType) {
+        startCol--;
       }
     }
 
-    // Find end of word (last word char at or after cursor)
+    // Find end of word (last char of same type at or after start)
+    const wordType = this.getCharType(text[startCol], false);
     let endCol = startCol;
-    while (endCol < text.length && wordChars.test(text[endCol])) {
+    while (endCol < text.length && this.getCharType(text[endCol], false) === wordType) {
       endCol++;
     }
     endCol = Math.max(0, endCol - 1);
