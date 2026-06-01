@@ -102,6 +102,13 @@ export function spawnShell(
     env.TERM = 'xterm-256color';
   }
 
+  // On macOS, getUserEnv() captures PWD from a fresh login shell (usually the
+  // home directory). The shell trusts the PWD env var over its actual working
+  // directory, so tools reading $PWD (e.g. mvim --remote) get the wrong path.
+  const resolvedCwd = cwd || os.homedir();
+  env.PWD = resolvedCwd;
+  delete env.OLDPWD;
+
   return pty.spawn(shellPath, args, {
     name: 'xterm-256color',
     cols,
