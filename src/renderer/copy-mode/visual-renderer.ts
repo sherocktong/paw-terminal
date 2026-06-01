@@ -4,6 +4,7 @@ export class VisualRenderer {
   private container: HTMLElement;
   private overlay: HTMLElement | null = null;
   private statusBar: HTMLElement | null = null;
+  private statusText: HTMLElement | null = null;
   private searchInput: HTMLInputElement | null = null;
   private lineElements: HTMLElement[] = [];
   private theme: Theme;
@@ -166,11 +167,15 @@ export class VisualRenderer {
     this.statusBar.className = 'copy-mode-status-bar';
     this.container.appendChild(this.statusBar);
 
+    this.statusText = document.createElement('span');
+    this.statusText.className = 'copy-mode-status-text';
+    this.statusBar.appendChild(this.statusText);
+
     this.searchInput = document.createElement('input');
     this.searchInput.className = 'copy-mode-search-input';
     this.searchInput.type = 'text';
     this.searchInput.spellcheck = false;
-    this.container.appendChild(this.searchInput);
+    this.statusBar.appendChild(this.searchInput);
   }
 
   private buildLineHtml(text: string, lineIdx: number, state: CopyModeState): string {
@@ -236,12 +241,12 @@ export class VisualRenderer {
   }
 
   private updateStatusBar(state: CopyModeState): void {
-    if (!this.statusBar) return;
+    if (!this.statusText) return;
 
     const mode = state.subMode === 'normal' ? 'NORMAL' : state.subMode === 'visual' ? 'VISUAL' : 'V-LINE';
     const pos = `${state.cursor.line + 1}:${state.cursor.col + 1}`;
     const search = state.searchQuery ? ` /${state.searchQuery}/` : '';
-    this.statusBar.textContent = `-- ${mode} -- ${pos}${search}`;
+    this.statusText.textContent = `-- ${mode} -- ${pos}${search}`;
   }
 
   showSearchInput(initialValue = '', direction: 'forward' | 'backward' = 'forward'): void {
@@ -277,10 +282,8 @@ export class VisualRenderer {
       this.statusBar.remove();
       this.statusBar = null;
     }
-    if (this.searchInput) {
-      this.searchInput.remove();
-      this.searchInput = null;
-    }
+    this.statusText = null;
+    this.searchInput = null;
     this.lineElements = [];
     this.cachedCharWidth = null;
     this.lastBufferLines = [];
