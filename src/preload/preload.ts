@@ -11,6 +11,7 @@ export interface PuppyApi {
   shell: {
     spawn: (cwd?: string) => Promise<{ id: string; pid: number }>;
     onData: (callback: (data: { id: string; data: string }) => void) => () => void;
+    onExit: (callback: (data: { id: string; exitCode?: number; signal?: number }) => void) => () => void;
     write: (id: string, data: string) => void;
     resize: (id: string, cols: number, rows: number) => void;
     kill: (id: string) => void;
@@ -63,6 +64,13 @@ const api: PuppyApi = {
       ipcRenderer.on(IPC_CHANNELS.SHELL_DATA, handler);
       return () => {
         ipcRenderer.removeListener(IPC_CHANNELS.SHELL_DATA, handler);
+      };
+    },
+    onExit: (callback) => {
+      const handler = (_event: unknown, data: { id: string; exitCode?: number; signal?: number }) => callback(data);
+      ipcRenderer.on(IPC_CHANNELS.SHELL_EXIT, handler);
+      return () => {
+        ipcRenderer.removeListener(IPC_CHANNELS.SHELL_EXIT, handler);
       };
     },
     write: (id: string, data: string) => ipcRenderer.send(IPC_CHANNELS.SHELL_INPUT, id, data),

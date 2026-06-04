@@ -31,8 +31,9 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
       event.sender.send(IPC_CHANNELS.SHELL_DATA, { id, data });
     });
 
-    ptyProcess.onExit(() => {
+    ptyProcess.onExit(({ exitCode, signal }) => {
       ptyMap.delete(id);
+      event.sender.send(IPC_CHANNELS.SHELL_EXIT, { id, exitCode, signal });
     });
 
     event.returnValue = { id, pid: ptyProcess.pid };

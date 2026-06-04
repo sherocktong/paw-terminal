@@ -102,6 +102,7 @@ export interface IpcChannels {
   'shell:resize': (cols: number, rows: number) => void;
   'shell:input': (data: string) => void;
   'shell:kill': () => void;
+  'shell:exit': () => { id: string; exitCode?: number; signal?: number };
   'shell:cwd': () => string | undefined;
   'clipboard:write': (text: string) => void;
   'theme:getSystem': () => AppearanceMode;

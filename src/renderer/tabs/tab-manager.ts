@@ -20,6 +20,7 @@ interface Tab {
   container: HTMLElement;
   onDataUnsubscribe: () => void;
   onInputUnsubscribe: () => void; // term.onData → shell.write
+  onExitUnsubscribe: () => void;
 }
 
 export class TabManager {
@@ -104,6 +105,7 @@ export class TabManager {
       container,
       onDataUnsubscribe: () => {},
       onInputUnsubscribe: () => inputDisposable.dispose(),
+      onExitUnsubscribe: () => {},
     };
 
     // Listen for data specifically for this tab
@@ -111,6 +113,22 @@ export class TabManager {
       if (dataId === id) {
         term.write(data);
       }
+    });
+
+    // Listen for shell exit: show a message but keep the tab open
+    tab.onExitUnsubscribe = window.puppy.shell.onExit(({ id: exitId, exitCode }) => {
+      if (exitId !== id) return;
+
+      const targetTab = this.tabs.find((t) => t.id === id);
+      if (!targetTab) return;
+
+      // Stop keyboard input from reaching the dead PTY
+      targetTab.onInputUnsubscribe();
+
+      const msg = exitCode != null
+        ? `\r\n[Process exited with code ${exitCode}]\r\n`
+        : `\r\n[Process exited]\r\n`;
+      targetTab.term.write(msg);
     });
 
     // Register OSC handlers for title (0/1/2) and CWD (7)
@@ -143,6 +161,7 @@ export class TabManager {
     const tab = this.tabs[index];
     tab.onDataUnsubscribe();
     tab.onInputUnsubscribe();
+    tab.onExitUnsubscribe();
     tab.copyMode.exit();
     this.themeManager.removeTerminal(tab.term);
     tab.term.dispose();
@@ -240,6 +259,7 @@ export class TabManager {
     }
     for (const tab of this.tabs) {
       tab.onDataUnsubscribe();
+      tab.onExitUnsubscribe();
       tab.copyMode.exit();
       this.themeManager.removeTerminal(tab.term);
       tab.term.dispose();

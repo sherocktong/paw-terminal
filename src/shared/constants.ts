@@ -12,6 +12,7 @@ export const IPC_CHANNELS = {
   SHELL_RESIZE: 'shell:resize',
   SHELL_INPUT: 'shell:input',
   SHELL_KILL: 'shell:kill',
+  SHELL_EXIT: 'shell:exit',
   SHELL_CWD: 'shell:cwd',
   CLIPBOARD_WRITE: 'clipboard:write',
   THEME_GET_SYSTEM: 'theme:getSystem',
