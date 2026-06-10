@@ -24,7 +24,7 @@ echo ""
 # Install dependencies if needed
 if [ ! -d "node_modules" ] || [ "package.json" -nt "node_modules/.package-lock.json" ]; then
     echo "Installing dependencies..."
-    npm ci
+    npm ci --ignore-scripts
     echo ""
 else
     echo "Dependencies up to date"
