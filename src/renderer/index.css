@@ -87,6 +87,28 @@ html, body {
   opacity: 1;
 }
 
+.tab-spinner {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border: 2.5px solid var(--tab-fg, #6272a4);
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: tab-spinner-spin 0.8s linear infinite;
+  flex-shrink: 0;
+}
+
+.tab.active .tab-spinner {
+  border-color: var(--tab-active-fg, #f8f8f2);
+  border-top-color: transparent;
+}
+
+@keyframes tab-spinner-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .tab-add {
   display: flex;
   align-items: center;

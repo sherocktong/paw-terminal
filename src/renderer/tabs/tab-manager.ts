@@ -14,6 +14,7 @@ interface Tab {
   osc1Title: string | null; // OSC 1 icon name (tab title)
   osc2Title: string | null; // OSC 2 window title
   cwdName: string | null;   // CWD name from lsof/OSC 7
+  hasRunningScript: boolean;
   term: Terminal;
   fitAddon: FitAddon;
   copyMode: CopyMode;
@@ -34,6 +35,7 @@ export class TabManager {
   private resizeObserver: ResizeObserver | null = null;
   private cwdPollInterval: NodeJS.Timeout | null = null;
   private shortcutsPanel: ShortcutsPanel | null = null;
+  private scriptPollInterval: NodeJS.Timeout | null = null;
 
   constructor(
     terminalContainer: HTMLElement,
@@ -50,6 +52,7 @@ export class TabManager {
     this.setupKeyboardShortcuts();
     this.setupResizeObserver();
     this.startCwdPolling();
+    this.startScriptPolling();
     this.setupGlobalDragOver();
   }
 
@@ -83,8 +86,12 @@ export class TabManager {
 
     // Prevent xterm.js from sending keys to the PTY while copy mode is active,
     // so TUI apps (e.g. Claude Code) don't also receive hjkl/G/etc.
-    term.attachCustomKeyEventHandler(() => {
-      return !copyMode.isActive();
+    // Also let system shortcuts (e.g. Option+F5) pass through without being
+    // consumed by the PTY.
+    term.attachCustomKeyEventHandler((e) => {
+      if (copyMode.isActive()) return false;
+      if (e.altKey && e.key === 'F5') return false;
+      return true;
     });
 
     // Send input to pty (keyboard / drop / paste → shell)
@@ -99,6 +106,7 @@ export class TabManager {
       osc1Title: null,
       osc2Title: null,
       cwdName: null,
+      hasRunningScript: false,
       term,
       fitAddon,
       copyMode,
@@ -139,8 +147,9 @@ export class TabManager {
     this.tabs.push(tab);
     this.activateTab(this.tabs.length - 1);
 
-    // Ensure CWD polling is running
+    // Ensure polling is running
     this.startCwdPolling();
+    this.startScriptPolling();
 
     // Fetch initial working directory for tab title
     this.updateTabTitleFromCwd(tab);
@@ -172,6 +181,7 @@ export class TabManager {
 
     if (this.tabs.length === 0) {
       this.stopCwdPolling();
+      this.stopScriptPolling();
       this.activeIndex = -1;
       this.renderTabBar();
       window.puppy.window.quit();
@@ -251,6 +261,7 @@ export class TabManager {
 
   dispose(): void {
     this.stopCwdPolling();
+    this.stopScriptPolling();
     if (this.globalDataUnsubscribe) {
       this.globalDataUnsubscribe();
     }
@@ -276,6 +287,12 @@ export class TabManager {
       const el = document.createElement('div');
       el.className = 'tab' + (i === this.activeIndex ? ' active' : '');
       el.title = tab.title;
+
+      if (tab.hasRunningScript) {
+        const spinner = document.createElement('span');
+        spinner.className = 'tab-spinner';
+        el.appendChild(spinner);
+      }
 
       const label = document.createElement('span');
       label.className = 'tab-label';
@@ -552,6 +569,37 @@ export class TabManager {
     if (this.cwdPollInterval) {
       clearInterval(this.cwdPollInterval);
       this.cwdPollInterval = null;
+    }
+  }
+
+  private startScriptPolling(): void {
+    this.stopScriptPolling();
+    this.scriptPollInterval = setInterval(() => {
+      if (this.tabs.length === 0) return;
+      Promise.all(
+        this.tabs.map((tab) =>
+          this.updateRunningScriptState(tab).catch(() => {})
+        )
+      );
+    }, 2000);
+  }
+
+  private stopScriptPolling(): void {
+    if (this.scriptPollInterval) {
+      clearInterval(this.scriptPollInterval);
+      this.scriptPollInterval = null;
+    }
+  }
+
+  private async updateRunningScriptState(tab: Tab): Promise<void> {
+    try {
+      const hasRunningScript = await window.puppy.shell.hasRunningScript(tab.id);
+      if (hasRunningScript !== tab.hasRunningScript) {
+        tab.hasRunningScript = hasRunningScript;
+        this.renderTabBar();
+      }
+    } catch {
+      // Ignore errors (e.g., process exited)
     }
   }
 

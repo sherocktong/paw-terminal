@@ -14,6 +14,7 @@ export const IPC_CHANNELS = {
   SHELL_KILL: 'shell:kill',
   SHELL_EXIT: 'shell:exit',
   SHELL_CWD: 'shell:cwd',
+  SHELL_HAS_RUNNING_SCRIPT: 'shell:hasRunningScript',
   CLIPBOARD_WRITE: 'clipboard:write',
   THEME_GET_SYSTEM: 'theme:getSystem',
   THEME_SYSTEM_CHANGED: 'theme:systemChanged',

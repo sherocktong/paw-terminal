@@ -1,5 +1,6 @@
 import * as pty from 'node-pty';
 import os from 'os';
+import fs from 'fs';
 import { execSync, exec } from 'child_process';
 import { promisify } from 'util';
 
@@ -32,7 +33,7 @@ export function getShellArgs(shell?: string): string[] {
 function getUserEnv(): Record<string, string> | undefined {
   if (os.platform() !== 'darwin') return undefined;
   try {
-    const shell = getDefaultShell();
+    const shell = findValidShell();
     const envOutput = execSync(`${shell} -l -c 'env'`, {
       encoding: 'utf-8',
       timeout: 5000,
@@ -50,6 +51,28 @@ function getUserEnv(): Record<string, string> | undefined {
   } catch {
     return undefined;
   }
+}
+
+export async function hasRunningScript(pid: number): Promise<boolean> {
+  try {
+    const platform = os.platform();
+    if (platform === 'darwin' || platform === 'linux') {
+      const { stdout } = await execAsync(`pgrep -P ${pid} 2>/dev/null`, {
+        encoding: 'utf-8',
+        timeout: 1000,
+      });
+      return stdout.trim().length > 0;
+    } else if (platform === 'win32') {
+      const { stdout } = await execAsync(
+        `powershell.exe -NoProfile -Command "Get-CimInstance Win32_Process | Where-Object { $_.ParentProcessId -eq ${pid} } | Select-Object -ExpandProperty ProcessId"`,
+        { encoding: 'utf-8', timeout: 1000 }
+      );
+      return stdout.trim().length > 0;
+    }
+  } catch {
+    // pgrep exits with code 1 when no children exist — treat as no running script
+  }
+  return false;
 }
 
 export async function getShellCwd(pid: number): Promise<string | undefined> {
@@ -81,6 +104,19 @@ export async function getShellCwd(pid: number): Promise<string | undefined> {
   return undefined;
 }
 
+function findValidShell(): string {
+  const candidates = [
+    getDefaultShell(),
+    '/bin/zsh',
+    '/bin/bash',
+    '/bin/sh',
+  ];
+  for (const path of candidates) {
+    if (fs.existsSync(path)) return path;
+  }
+  throw new Error('No valid shell found. Tried: ' + candidates.join(', '));
+}
+
 export function spawnShell(
   shell?: string,
   shellArgs?: string[],
@@ -88,7 +124,11 @@ export function spawnShell(
   cols = 80,
   rows = 30
 ): pty.IPty {
-  const shellPath = shell || getDefaultShell();
+  let shellPath = shell || getDefaultShell();
+  if (!fs.existsSync(shellPath)) {
+    console.warn(`Configured shell "${shellPath}" not found, falling back to default.`);
+    shellPath = findValidShell();
+  }
   const args = shellArgs ?? getShellArgs(shellPath);
 
   // On macOS, GUI apps inherit a minimal environment from launchd.
@@ -105,7 +145,11 @@ export function spawnShell(
   // On macOS, getUserEnv() captures PWD from a fresh login shell (usually the
   // home directory). The shell trusts the PWD env var over its actual working
   // directory, so tools reading $PWD (e.g. mvim --remote) get the wrong path.
-  const resolvedCwd = cwd || os.homedir();
+  let resolvedCwd = cwd || os.homedir();
+  if (!fs.existsSync(resolvedCwd)) {
+    console.warn(`CWD "${resolvedCwd}" does not exist, falling back to home directory.`);
+    resolvedCwd = os.homedir();
+  }
   env.PWD = resolvedCwd;
   delete env.OLDPWD;
 
@@ -113,7 +157,7 @@ export function spawnShell(
     name: 'xterm-256color',
     cols,
     rows,
-    cwd: cwd || os.homedir(),
+    cwd: resolvedCwd,
     env,
   });
 }

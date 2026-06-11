@@ -17,5 +17,11 @@ export function captureBuffer(term: Terminal): string[] {
     lines.push(text);
   }
 
+  // Trim trailing empty lines so the cursor starts at the last row with actual
+  // content instead of an unused terminal row at the bottom of the buffer.
+  while (lines.length > 0 && lines[lines.length - 1] === '') {
+    lines.pop();
+  }
+
   return lines;
 }

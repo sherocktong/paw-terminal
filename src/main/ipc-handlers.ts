@@ -2,7 +2,7 @@ import { ipcMain, clipboard, nativeTheme, BrowserWindow, app } from 'electron';
 import crypto from 'crypto';
 import { IPC_CHANNELS } from '../shared/constants';
 import { loadConfig, saveConfig } from './config-manager';
-import { spawnShell, getShellCwd } from './shell-manager';
+import { spawnShell, getShellCwd, hasRunningScript } from './shell-manager';
 import type { Config } from '../shared/types';
 import type { IPty } from 'node-pty';
 
@@ -19,7 +19,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
   });
 
   // Shell / PTY
-  ipcMain.on(IPC_CHANNELS.SHELL_SPAWN, (event, cwd?: string) => {
+  ipcMain.handle(IPC_CHANNELS.SHELL_SPAWN, (_event, cwd?: string) => {
     const config = loadConfig();
     const cols = 80;
     const rows = 30;
@@ -28,15 +28,20 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     ptyMap.set(id, ptyProcess);
 
     ptyProcess.onData((data) => {
-      event.sender.send(IPC_CHANNELS.SHELL_DATA, { id, data });
+      // Use webContents to send data to renderer
+      if (!mainWindow.isDestroyed()) {
+        mainWindow.webContents.send(IPC_CHANNELS.SHELL_DATA, { id, data });
+      }
     });
 
     ptyProcess.onExit(({ exitCode, signal }) => {
       ptyMap.delete(id);
-      event.sender.send(IPC_CHANNELS.SHELL_EXIT, { id, exitCode, signal });
+      if (!mainWindow.isDestroyed()) {
+        mainWindow.webContents.send(IPC_CHANNELS.SHELL_EXIT, { id, exitCode, signal });
+      }
     });
 
-    event.returnValue = { id, pid: ptyProcess.pid };
+    return { id, pid: ptyProcess.pid };
   });
 
   ipcMain.on(IPC_CHANNELS.SHELL_INPUT, (_event, id: string, data: string) => {
@@ -67,6 +72,14 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
       return getShellCwd(ptyProcess.pid);
     }
     return undefined;
+  });
+
+  ipcMain.handle(IPC_CHANNELS.SHELL_HAS_RUNNING_SCRIPT, async (_event, id: string): Promise<boolean> => {
+    const ptyProcess = ptyMap.get(id);
+    if (ptyProcess) {
+      return hasRunningScript(ptyProcess.pid);
+    }
+    return false;
   });
 
   // Clipboard

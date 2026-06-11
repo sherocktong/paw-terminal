@@ -16,6 +16,7 @@ export interface PuppyApi {
     resize: (id: string, cols: number, rows: number) => void;
     kill: (id: string) => void;
     getCwd: (id: string) => Promise<string | undefined>;
+    hasRunningScript: (id: string) => Promise<boolean>;
   };
   clipboard: {
     writeText: (text: string) => void;
@@ -55,10 +56,7 @@ const api: PuppyApi = {
     },
   },
   shell: {
-    spawn: (cwd?: string) => new Promise((resolve) => {
-      const result = ipcRenderer.sendSync(IPC_CHANNELS.SHELL_SPAWN, cwd);
-      resolve(result);
-    }),
+    spawn: (cwd?: string) => ipcRenderer.invoke(IPC_CHANNELS.SHELL_SPAWN, cwd),
     onData: (callback) => {
       const handler = (_event: unknown, data: { id: string; data: string }) => callback(data);
       ipcRenderer.on(IPC_CHANNELS.SHELL_DATA, handler);
@@ -81,6 +79,7 @@ const api: PuppyApi = {
       ipcRenderer.send(IPC_CHANNELS.SHELL_KILL, id);
     },
     getCwd: (id: string) => ipcRenderer.invoke(IPC_CHANNELS.SHELL_CWD, id),
+    hasRunningScript: (id: string) => ipcRenderer.invoke(IPC_CHANNELS.SHELL_HAS_RUNNING_SCRIPT, id),
   },
   clipboard: {
     writeText: (text: string) => ipcRenderer.send(IPC_CHANNELS.CLIPBOARD_WRITE, text),

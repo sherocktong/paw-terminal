@@ -19,7 +19,20 @@ async function main(): Promise<void> {
   tabManager.setShortcutsPanel(shortcutsPanel);
 
   // Create initial tab
-  await tabManager.addTab();
+  try {
+    await tabManager.addTab();
+  } catch (err) {
+    console.error('Failed to create initial tab:', err);
+    const errorMsg = document.createElement('div');
+    errorMsg.style.cssText =
+      'padding:20px;color:#ff5555;font-family:monospace;white-space:pre-wrap;';
+    errorMsg.textContent =
+      'Failed to start shell.\n\n' +
+      (err instanceof Error ? err.message : String(err)) +
+      '\n\nPlease check your shell configuration in ~/.config/paw/config.json';
+    terminalContainer.appendChild(errorMsg);
+    return;
+  }
 
   // Listen for config changes
   window.puppy.config.onChange((newConfig) => {
