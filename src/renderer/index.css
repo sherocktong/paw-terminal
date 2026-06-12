@@ -13,13 +13,13 @@ html, body {
 
 #tab-bar {
   display: flex;
-  align-items: center;
-  height: 36px;
+  align-items: flex-end;
+  height: 34px;
+  padding-top: 6px;
   background: var(--tab-bar-bg, #1e1f29);
   border-bottom: 1px solid var(--tab-bar-border, #44475a);
-  padding: 0 4px;
   padding-left: 84px; /* macOS traffic lights offset */
-  gap: 4px;
+  padding-right: 4px;
   flex-shrink: 0;
   overflow-x: auto;
   overflow-y: hidden;
@@ -39,8 +39,9 @@ html, body {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 4px 10px;
-  border-radius: 6px;
+  padding: 4px 10px 6px;
+  border-radius: 6px 6px 0 0;
+  border-left: 1px solid var(--tab-separator, transparent);
   background: var(--tab-bg, #282a36);
   color: var(--tab-fg, #6272a4);
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -53,6 +54,14 @@ html, body {
   min-width: 80px;
 }
 
+.tab:first-child {
+  border-left: none;
+}
+
+.tab.active + .tab {
+  border-left-color: transparent;
+}
+
 .tab:hover {
   background: var(--tab-hover-bg, #44475a);
   color: var(--tab-hover-fg, #f8f8f2);
@@ -61,8 +70,10 @@ html, body {
 .tab.active {
   background: var(--tab-active-bg, #44475a);
   color: var(--tab-active-fg, #f8f8f2);
-  font-weight: 600;
-  box-shadow: inset 0 2px 0 0 var(--tab-active-border, var(--tab-active-fg, #f8f8f2));
+  border-left-color: transparent;
+  margin-bottom: -1px;
+  padding-bottom: 7px;
+  border-bottom: 1px solid var(--tab-active-bg, #44475a);
 }
 
 .tab-label {

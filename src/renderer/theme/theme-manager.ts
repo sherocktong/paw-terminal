@@ -110,15 +110,15 @@ export class ThemeManager {
 
     // Tab bar colors based on theme type
     const isLight = theme.type === 'light';
-    root.style.setProperty('--tab-bar-bg', isLight ? '#e8e8e8' : '#1e1f29');
-    root.style.setProperty('--tab-bar-border', isLight ? '#d0d0d0' : '#44475a');
-    root.style.setProperty('--tab-bg', isLight ? '#e0e0e0' : '#282a36');
-    root.style.setProperty('--tab-fg', isLight ? '#888888' : '#6272a4');
-    root.style.setProperty('--tab-hover-bg', isLight ? '#f0f0f0' : '#3a3d4d');
-    root.style.setProperty('--tab-hover-fg', isLight ? '#333333' : '#f8f8f2');
-    root.style.setProperty('--tab-active-bg', isLight ? '#ffffff' : '#5a5c6e');
-    root.style.setProperty('--tab-active-fg', isLight ? '#333333' : '#f8f8f2');
-    root.style.setProperty('--tab-active-border', theme.colors.foreground);
+    root.style.setProperty('--tab-bar-bg', isLight ? '#b0b0b0' : '#191a24');
+    root.style.setProperty('--tab-bar-border', isLight ? '#a0a0a0' : '#383a4a');
+    root.style.setProperty('--tab-bg', isLight ? '#c2c2c2' : '#21222c');
+    root.style.setProperty('--tab-fg', isLight ? '#555555' : '#6272a4');
+    root.style.setProperty('--tab-hover-bg', isLight ? '#b8b8b8' : '#252636');
+    root.style.setProperty('--tab-hover-fg', isLight ? '#222222' : '#f8f8f2');
+    root.style.setProperty('--tab-active-bg', theme.colors.background);
+    root.style.setProperty('--tab-active-fg', isLight ? '#000000' : '#f8f8f2');
+    root.style.setProperty('--tab-separator', isLight ? 'rgba(0, 0, 0, 0.12)' : 'rgba(255, 255, 255, 0.06)');
 
     document.documentElement.style.background = theme.colors.background;
     document.body.style.background = theme.colors.background;
