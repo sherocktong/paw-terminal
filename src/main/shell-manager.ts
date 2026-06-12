@@ -53,26 +53,92 @@ function getUserEnv(): Record<string, string> | undefined {
   }
 }
 
-export async function hasRunningScript(pid: number): Promise<boolean> {
+// Common interactive terminal/console applications that should not trigger
+// the running-script spinner.
+const INTERACTIVE_CONSOLE_NAMES = new Set([
+  'claude',
+  'vim', 'nvim', 'vi', 'view',
+  'emacs', 'nano', 'pico', 'micro',
+  'htop', 'top', 'btop', 'gotop', 'ytop', 'atop',
+  'ranger', 'nnn', 'lf', 'vifm', 'xplr', 'joshuto',
+  'lazygit', 'gitui', 'tig',
+  'fzf', 'peco', 'sk',
+  'tmux', 'screen',
+  'irssi', 'weechat',
+  'cmus', 'ncmpcpp', 'musikcube',
+  'lazydocker',
+]);
+
+async function getProcessChildren(pid: number): Promise<number[]> {
+  try {
+    const { stdout } = await execAsync(`pgrep -P ${pid} 2>/dev/null`, {
+      encoding: 'utf-8',
+      timeout: 1000,
+    });
+    return stdout
+      .trim()
+      .split('\n')
+      .map((line) => parseInt(line.trim(), 10))
+      .filter((n) => !isNaN(n));
+  } catch {
+    // pgrep exits with code 1 when no children exist
+  }
+  return [];
+}
+
+async function collectDescendantPids(pid: number): Promise<number[]> {
+  const children = await getProcessChildren(pid);
+  const result: number[] = [];
+  for (const childPid of children) {
+    result.push(childPid);
+    const descendants = await collectDescendantPids(childPid);
+    result.push(...descendants);
+  }
+  return result;
+}
+
+async function getProcessNames(pids: number[]): Promise<string[]> {
+  if (pids.length === 0) return [];
   try {
     const platform = os.platform();
     if (platform === 'darwin' || platform === 'linux') {
-      const { stdout } = await execAsync(`pgrep -P ${pid} 2>/dev/null`, {
-        encoding: 'utf-8',
-        timeout: 1000,
-      });
-      return stdout.trim().length > 0;
-    } else if (platform === 'win32') {
       const { stdout } = await execAsync(
-        `powershell.exe -NoProfile -Command "Get-CimInstance Win32_Process | Where-Object { $_.ParentProcessId -eq ${pid} } | Select-Object -ExpandProperty ProcessId"`,
+        `ps -o comm= -p ${pids.join(',')}`,
         { encoding: 'utf-8', timeout: 1000 }
       );
-      return stdout.trim().length > 0;
+      return stdout
+        .trim()
+        .split('\n')
+        .map((name) => name.trim())
+        .filter(Boolean)
+        .map((name) => name.replace(/\.exe$/i, ''));
+    } else if (platform === 'win32') {
+      const { stdout } = await execAsync(
+        `powershell.exe -NoProfile -Command "Get-CimInstance Win32_Process | Where-Object { ${pids.map((p) => `$_.ProcessId -eq ${p}`).join(' -or ')} } | Select-Object Name"`,
+        { encoding: 'utf-8', timeout: 1000 }
+      );
+      return stdout
+        .trim()
+        .split('\n')
+        .map((name) => name.replace(/\.exe$/i, '').trim())
+        .filter(Boolean);
     }
   } catch {
-    // pgrep exits with code 1 when no children exist — treat as no running script
+    // Ignore errors (process may have exited)
   }
-  return false;
+  return [];
+}
+
+export async function hasRunningScript(pid: number): Promise<boolean> {
+  const descendants = await collectDescendantPids(pid);
+  if (descendants.length === 0) return false;
+
+  const names = await getProcessNames(descendants);
+  // If any descendant is an interactive console/TUI app, do not show the spinner.
+  if (names.some((name) => INTERACTIVE_CONSOLE_NAMES.has(name.toLowerCase()))) {
+    return false;
+  }
+  return true;
 }
 
 export async function getShellCwd(pid: number): Promise<string | undefined> {

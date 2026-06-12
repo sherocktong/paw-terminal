@@ -112,12 +112,13 @@ export class ThemeManager {
     const isLight = theme.type === 'light';
     root.style.setProperty('--tab-bar-bg', isLight ? '#e8e8e8' : '#1e1f29');
     root.style.setProperty('--tab-bar-border', isLight ? '#d0d0d0' : '#44475a');
-    root.style.setProperty('--tab-bg', isLight ? '#f0f0f0' : '#282a36');
+    root.style.setProperty('--tab-bg', isLight ? '#e0e0e0' : '#282a36');
     root.style.setProperty('--tab-fg', isLight ? '#888888' : '#6272a4');
-    root.style.setProperty('--tab-hover-bg', isLight ? '#d8d8d8' : '#44475a');
+    root.style.setProperty('--tab-hover-bg', isLight ? '#f0f0f0' : '#3a3d4d');
     root.style.setProperty('--tab-hover-fg', isLight ? '#333333' : '#f8f8f2');
-    root.style.setProperty('--tab-active-bg', isLight ? '#d8d8d8' : '#44475a');
+    root.style.setProperty('--tab-active-bg', isLight ? '#ffffff' : '#5a5c6e');
     root.style.setProperty('--tab-active-fg', isLight ? '#333333' : '#f8f8f2');
+    root.style.setProperty('--tab-active-border', theme.colors.foreground);
 
     document.documentElement.style.background = theme.colors.background;
     document.body.style.background = theme.colors.background;
