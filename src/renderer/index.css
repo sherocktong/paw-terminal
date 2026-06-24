@@ -182,93 +182,53 @@ body {
   background-color: transparent !important;
 }
 
-/* Copy Mode Overlay */
-.copy-mode-overlay {
+/* Copy Mode Selection Overlay (only for multi-line visual selections) */
+.copy-mode-selection-overlay {
+  position: absolute;
+  top: 0;
+  left: 4ch;
+  right: 0;
+  bottom: 24px;
+  pointer-events: none;
+  z-index: 99;
+}
+
+.copy-mode-selection-span {
+  background: var(--copy-mode-fg, #f8f8f2);
+  opacity: 0.5;
+}
+
+.copy-mode-linenr-overlay {
   position: absolute;
   top: 0;
   left: 0;
-  right: 0;
   bottom: 24px;
-  overflow: auto;
-  font-family: Menlo, Monaco, "Courier New", monospace;
-  font-size: 14px;
-  line-height: 1.2;
-  padding: 4px;
-  padding-bottom: 0;
-  background: var(--copy-mode-bg, #282a36);
-  color: var(--copy-mode-fg, #f8f8f2);
-  z-index: 100;
-  white-space: pre;
-  cursor: text;
-  user-select: none;
-}
-
-.copy-mode-line {
-  display: block;
-  min-height: 1.2em;
-}
-
-.copy-mode-row {
+  width: 4ch;
+  padding: 4px 4px 4px 8px;
+  pointer-events: none;
+  z-index: 98;
   display: flex;
-  align-items: flex-start;
+  flex-direction: column;
+  align-items: flex-end;
+  background: transparent;
 }
 
-.copy-mode-linenr {
-  display: inline-block;
-  width: 3ch;
-  text-align: right;
-  margin-right: 8px;
+.copy-mode-linenr-overlay .copy-mode-linenr {
+  font-family: Menlo, Monaco, "Courier New", monospace;
   color: var(--copy-mode-linenr, #6272a4);
   user-select: none;
-  flex-shrink: 0;
+  line-height: 1.2;
 }
 
-.copy-mode-linenr.current {
+.copy-mode-linenr-overlay .copy-mode-linenr.current {
   color: var(--copy-mode-linenr-current, #f8f8f2);
   font-weight: bold;
 }
 
-.copy-mode-cursor {
-  position: absolute;
-  width: 1ch;
-  height: 1.2em;
-  background: var(--copy-mode-cursor, #f8f8f2);
-  opacity: 0.6;
-  pointer-events: none;
-}
-
-.copy-mode-cursor-bar,
-.copy-mode-cursor-underline {
-  opacity: 1;
-}
-
-.copy-mode-cursor-blink {
-  animation: copy-mode-cursor-blink 1s step-end infinite;
-}
-
-.copy-mode-cursor-bar.copy-mode-cursor-blink,
-.copy-mode-cursor-underline.copy-mode-cursor-blink {
-  animation-name: copy-mode-cursor-blink-solid;
-}
-
-@keyframes copy-mode-cursor-blink {
-  0%, 100% { opacity: 0.6; }
-  50% { opacity: 0; }
-}
-
-@keyframes copy-mode-cursor-blink-solid {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0; }
-}
-
-.copy-mode-selection {
-  background: var(--copy-mode-selection, #44475a);
-  color: var(--copy-mode-selection-fg, #f8f8f2);
-}
-
-.copy-mode-search-highlight {
-  background: var(--copy-mode-search, #ffb86c);
-  color: var(--copy-mode-search-fg, #282a36);
+/* Shift xterm.js content right when copy mode is active to make room for the
+   line-number gutter. */
+.copy-mode-active .xterm {
+  margin-left: 4ch !important;
 }
 
 .copy-mode-status-bar {

@@ -1,9 +1,11 @@
 import { Terminal } from '@xterm/xterm';
-import type { Config, CopyModeState, CopyModePosition, CopyModeSubMode, Theme } from '../../shared/types';
+import type { Config, CopyModeState, CopyModePosition, CopyModeSubMode } from '../../shared/types';
 import { captureBuffer } from './buffer-capture';
 import { KeyHandler, type ParsedCommand } from './key-handler';
-import { searchBuffer, type SearchResult } from './search';
-import { VisualRenderer } from './visual-renderer';
+import { searchBuffer } from './search';
+import { StatusBar } from './status-bar';
+import { SelectionOverlay } from './selection-overlay';
+import { LineNumberOverlay } from './line-number-overlay';
 import type { ThemeManager } from '../theme/theme-manager';
 
 export class CopyMode {
@@ -12,28 +14,34 @@ export class CopyMode {
   private config: Config;
   private themeManager: ThemeManager;
   private state: CopyModeState;
-  private renderer: VisualRenderer;
+  private statusBar: StatusBar | null = null;
+  private selectionOverlay: SelectionOverlay;
+  private lineNumberOverlay: LineNumberOverlay;
   private keyHandlerInstance = new KeyHandler();
   private searchDirection: 'forward' | 'backward' = 'forward';
   private isSearching = false;
   private lastSearchQuery = '';
+  private originalSelectionBg: string | undefined;
+  private originalSelectionFg: string | undefined;
 
   constructor(term: Terminal, container: HTMLElement, config: Config, themeManager: ThemeManager) {
     this.term = term;
     this.container = container;
     this.config = config;
     this.themeManager = themeManager;
-    this.renderer = new VisualRenderer(container, themeManager.getCurrentTheme(), config.font, config.cursorStyle, config.cursorBlink);
+    this.selectionOverlay = new SelectionOverlay(container);
+    this.lineNumberOverlay = new LineNumberOverlay(container, themeManager.getCurrentTheme(), config.font);
     this.state = this.createInitialState();
   }
 
   updateConfig(config: Config): void {
     this.config = config;
-    this.renderer.setTheme(this.themeManager.getCurrentTheme());
-    this.renderer.setFont(config.font);
-    this.renderer.setCursorStyle(config.cursorStyle, config.cursorBlink);
     if (this.state.active) {
-      this.renderer.render(this.state);
+      this.statusBar?.setTheme(this.themeManager.getCurrentTheme());
+      this.statusBar?.setFont(config.font);
+      this.lineNumberOverlay.setTheme(this.themeManager.getCurrentTheme());
+      this.lineNumberOverlay.setFont(config.font);
+      this.updateSelection();
     }
   }
 
@@ -73,17 +81,26 @@ export class CopyMode {
     };
 
     this.term.blur();
-    this.term.element?.classList.add('copy-mode-active');
-    this.renderer.scrollToLine(cursorLine);
-    this.renderer.render(this.state);
+    this.container.classList.add('copy-mode-active');
+    this.applyCursorTheme();
+    this.statusBar = new StatusBar(this.container, this.themeManager.getCurrentTheme(), this.config.font);
+    this.ensureCursorInView();
+    this.updateLineNumbers();
+    this.updateSelection();
+    this.statusBar.update(this.state);
   }
 
   exit(): void {
     if (!this.state.active) return;
 
     this.state = this.createInitialState();
-    this.renderer.clear();
-    this.term.element?.classList.remove('copy-mode-active');
+    this.term.clearSelection();
+    this.restoreNormalTheme();
+    this.selectionOverlay.clear();
+    this.lineNumberOverlay.clear();
+    this.statusBar?.destroy();
+    this.statusBar = null;
+    this.container.classList.remove('copy-mode-active');
     this.term.focus();
 
     this.keyHandlerInstance.reset();
@@ -127,7 +144,9 @@ export class CopyMode {
     e.preventDefault();
 
     if (parsed.command === 'noop') {
-      this.renderer.render(this.state);
+      this.updateSelection();
+      this.updateLineNumbers();
+      this.statusBar?.update(this.state);
       return true;
     }
 
@@ -195,27 +214,31 @@ export class CopyMode {
           : Math.max(0, Math.min(count - 1, this.state.bufferLines.length - 1));
         break;
       case 'moveScreenTop':
-        this.state.cursor.line = 0;
+        this.state.cursor.line = this.term.buffer.active.viewportY;
         break;
       case 'moveScreenMiddle': {
-        const mid = Math.floor(this.state.bufferLines.length / 2);
-        this.state.cursor.line = mid;
+        const viewportY = this.term.buffer.active.viewportY;
+        const rows = this.term.rows;
+        this.state.cursor.line = viewportY + Math.floor(rows / 2);
         break;
       }
-      case 'moveScreenBottom':
-        this.state.cursor.line = Math.max(0, this.state.bufferLines.length - 1);
+      case 'moveScreenBottom': {
+        const viewportY = this.term.buffer.active.viewportY;
+        const rows = this.term.rows;
+        this.state.cursor.line = Math.min(this.state.bufferLines.length - 1, viewportY + rows - 1);
         break;
+      }
       case 'scrollHalfPageDown':
-        this.moveCursor(Math.floor(this.state.bufferLines.length / 2) * count, 0);
+        this.scrollBy(Math.floor(this.term.rows / 2) * count);
         break;
       case 'scrollHalfPageUp':
-        this.moveCursor(-Math.floor(this.state.bufferLines.length / 2) * count, 0);
+        this.scrollBy(-Math.floor(this.term.rows / 2) * count);
         break;
       case 'scrollPageDown':
-        this.moveCursor(20 * count, 0);
+        this.scrollBy(this.term.rows * count);
         break;
       case 'scrollPageUp':
-        this.moveCursor(-20 * count, 0);
+        this.scrollBy(-this.term.rows * count);
         break;
       case 'enterVisual':
         this.enterSubMode('visual');
@@ -250,7 +273,10 @@ export class CopyMode {
     }
 
     this.clampCursor();
-    this.renderer.render(this.state);
+    this.ensureCursorInView();
+    this.updateSelection();
+    this.updateLineNumbers();
+    this.statusBar?.update(this.state);
   }
 
   private moveCursor(dLine: number, dCol: number): void {
@@ -259,11 +285,88 @@ export class CopyMode {
     this.clampCursor();
   }
 
+  private scrollBy(lines: number): void {
+    const viewportY = this.term.buffer.active.viewportY;
+    const maxY = Math.max(0, this.state.bufferLines.length - this.term.rows);
+    const targetY = Math.max(0, Math.min(viewportY + lines, maxY));
+    this.term.scrollToLine(targetY);
+    // Keep cursor on screen by moving it with the viewport
+    const rows = this.term.rows;
+    if (this.state.cursor.line < targetY) {
+      this.state.cursor.line = targetY;
+    } else if (this.state.cursor.line >= targetY + rows) {
+      this.state.cursor.line = Math.min(this.state.bufferLines.length - 1, targetY + rows - 1);
+    }
+    this.clampCursor();
+  }
+
   private clampCursor(): void {
     const maxLine = Math.max(0, this.state.bufferLines.length - 1);
     this.state.cursor.line = Math.max(0, Math.min(this.state.cursor.line, maxLine));
     const maxCol = Math.max(0, this.getLineLength(this.state.cursor.line) - 1);
     this.state.cursor.col = Math.max(0, Math.min(this.state.cursor.col, maxCol));
+  }
+
+  private ensureCursorInView(): void {
+    const viewportY = this.term.buffer.active.viewportY;
+    const rows = this.term.rows;
+    const cursorLine = this.state.cursor.line;
+
+    if (cursorLine < viewportY) {
+      this.term.scrollToLine(cursorLine);
+    } else if (cursorLine >= viewportY + rows) {
+      this.term.scrollToLine(Math.max(0, cursorLine - rows + 1));
+    }
+  }
+
+  private updateSelection(): void {
+    this.selectionOverlay.clear();
+    this.term.clearSelection();
+
+    if (this.state.subMode === 'normal') {
+      const line = this.state.cursor.line;
+      const col = this.state.cursor.col;
+      const lineText = this.state.bufferLines[line] || '';
+      const safeCol = Math.min(col, Math.max(0, lineText.length - 1));
+      if (lineText.length > 0) {
+        this.term.select(safeCol, line, 1);
+      }
+      return;
+    }
+
+    if (!this.state.anchor) return;
+
+    if (this.state.subMode === 'visualLine') {
+      const start = Math.min(this.state.anchor.line, this.state.cursor.line);
+      const end = Math.max(this.state.anchor.line, this.state.cursor.line);
+      this.term.selectLines(start, end);
+      return;
+    }
+
+    // visual (char-wise)
+    const anchor = this.state.anchor;
+    const startLine = Math.min(anchor.line, this.state.cursor.line);
+    const endLine = Math.max(anchor.line, this.state.cursor.line);
+    const startCol = Math.min(anchor.col, this.state.cursor.col);
+    const endCol = Math.max(anchor.col, this.state.cursor.col);
+
+    if (startLine === endLine) {
+      const lineText = this.state.bufferLines[startLine] || '';
+      const length = Math.min(endCol - startCol + 1, lineText.length - startCol);
+      if (length > 0) {
+        this.term.select(startCol, startLine, length);
+      }
+    } else {
+      // xterm.js cannot represent multi-line partial selections; use overlay
+      this.selectionOverlay.showSelection(
+        anchor,
+        this.state.cursor,
+        'visual',
+        this.config.font,
+        this.term.buffer.active.viewportY,
+        (line) => this.state.bufferLines[line]?.length ?? 0
+      );
+    }
   }
 
   private getLineLength(line: number): number {
@@ -512,9 +615,42 @@ export class CopyMode {
       // Yank current line
       const text = this.state.bufferLines[this.state.cursor.line] || '';
       window.puppy.clipboard.writeText(text + '\n');
-    } else {
-      const text = this.getSelectionText();
+    } else if (this.state.subMode === 'visualLine') {
+      const text = this.term.getSelection();
       window.puppy.clipboard.writeText(text);
+    } else {
+      // visual char-wise
+      const anchor = this.state.anchor;
+      const startLine = Math.min(anchor.line, this.state.cursor.line);
+      const endLine = Math.max(anchor.line, this.state.cursor.line);
+
+      if (startLine === endLine) {
+        // xterm.js can give us the single-line selection directly
+        const text = this.term.getSelection();
+        window.puppy.clipboard.writeText(text);
+      } else {
+        // Multi-line partial: compute from buffer lines because xterm.js
+        // selection API cannot represent it.
+        const startCol = Math.min(anchor.col, this.state.cursor.col);
+        const endCol = Math.max(anchor.col, this.state.cursor.col);
+        const lines: string[] = [];
+        for (let i = startLine; i <= endLine; i++) {
+          const lineText = this.state.bufferLines[i] || '';
+          if (i === startLine && i === endLine) {
+            lines.push(lineText.slice(startCol, endCol + 1));
+          } else if (i === startLine) {
+            lines.push(lineText.slice(startCol));
+          } else if (i === endLine) {
+            // If the cursor is at column 0 of the last line, treat the
+            // selection as including the whole last line (common terminal
+            // copy-mode behavior); otherwise respect the exact column.
+            lines.push(endCol === 0 ? lineText : lineText.slice(0, endCol + 1));
+          } else {
+            lines.push(lineText);
+          }
+        }
+        window.puppy.clipboard.writeText(lines.join('\n'));
+      }
     }
     this.exit();
   }
@@ -617,7 +753,7 @@ export class CopyMode {
       } else if (i === start.line) {
         lines.push(lineText.slice(start.col));
       } else if (i === end.line) {
-        lines.push(lineText.slice(0, end.col + 1));
+        lines.push(end.col === 0 ? lineText : lineText.slice(0, end.col + 1));
       } else {
         lines.push(lineText);
       }
@@ -629,22 +765,24 @@ export class CopyMode {
   private startSearch(direction: 'forward' | 'backward'): void {
     this.isSearching = true;
     this.searchDirection = direction;
-    this.renderer.showSearchInput(this.lastSearchQuery, direction);
+    this.statusBar?.showSearchInput(this.lastSearchQuery, direction);
   }
 
   private cancelSearch(): void {
     this.isSearching = false;
-    this.renderer.hideSearchInput();
-    this.renderer.render(this.state);
+    this.statusBar?.hideSearchInput();
+    this.updateSelection();
+    this.statusBar?.update(this.state);
   }
 
   private executeSearch(): void {
-    const query = this.renderer.hideSearchInput();
+    const query = this.statusBar?.hideSearchInput() ?? '';
     this.isSearching = false;
     this.lastSearchQuery = query;
 
     if (!query) {
-      this.renderer.render(this.state);
+      this.updateSelection();
+      this.statusBar?.update(this.state);
       return;
     }
 
@@ -664,9 +802,13 @@ export class CopyMode {
     if (result.currentIndex >= 0 && result.positions.length > 0) {
       const pos = result.positions[result.currentIndex];
       this.state.cursor = { ...pos };
+      this.clampCursor();
+      this.ensureCursorInView();
     }
 
-    this.renderer.render(this.state);
+    this.updateSelection();
+    this.updateLineNumbers();
+    this.statusBar?.update(this.state);
   }
 
   private nextSearch(count: number): void {
@@ -694,7 +836,10 @@ export class CopyMode {
     }
     this.state.currentSearchIndex = idx;
     this.state.cursor = { ...this.state.searchResults[idx] };
-    this.renderer.render(this.state);
+    this.clampCursor();
+    this.ensureCursorInView();
+    this.updateSelection();
+    this.statusBar?.update(this.state);
   }
 
   private prevSearch(count: number): void {
@@ -722,6 +867,35 @@ export class CopyMode {
     }
     this.state.currentSearchIndex = idx;
     this.state.cursor = { ...this.state.searchResults[idx] };
-    this.renderer.render(this.state);
+    this.clampCursor();
+    this.ensureCursorInView();
+    this.updateSelection();
+    this.updateLineNumbers();
+    this.statusBar?.update(this.state);
+  }
+
+  private updateLineNumbers(): void {
+    this.lineNumberOverlay.render(
+      this.term.buffer.active.viewportY,
+      this.term.rows,
+      this.state.cursor.line
+    );
+  }
+
+  private applyCursorTheme(): void {
+    const theme = this.term.options.theme || {};
+    this.originalSelectionBg = theme.selectionBackground;
+    this.originalSelectionFg = theme.selectionForeground;
+    const currentTheme = this.themeManager.getCurrentTheme().colors;
+    this.term.options.theme = {
+      ...theme,
+      selectionBackground: currentTheme.foreground,
+      selectionForeground: currentTheme.background,
+    };
+  }
+
+  private restoreNormalTheme(): void {
+    const theme = this.term.options.theme || {};
+    this.term.options.theme = { ...theme, selectionBackground: this.originalSelectionBg, selectionForeground: this.originalSelectionFg };
   }
 }
