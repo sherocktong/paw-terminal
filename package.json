@@ -1,6 +1,6 @@
 {
   "name": "paw-terminal",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "description": "A modern terminal emulator with vim-like copy mode",
   "main": "./dist/main/main.cjs",
   "author": "Bing Tong",
