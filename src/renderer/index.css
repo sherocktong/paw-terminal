@@ -194,7 +194,7 @@ body {
 }
 
 .copy-mode-selection-span {
-  background: var(--copy-mode-fg, #f8f8f2);
+  background: var(--copy-mode-selection, var(--copy-mode-fg, #f8f8f2));
   opacity: 0.5;
 }
 
@@ -211,13 +211,15 @@ body {
   flex-direction: column;
   align-items: flex-end;
   background: transparent;
+  line-height: 1;
 }
 
 .copy-mode-linenr-overlay .copy-mode-linenr {
   font-family: Menlo, Monaco, "Courier New", monospace;
   color: var(--copy-mode-linenr, #6272a4);
   user-select: none;
-  line-height: 1.2;
+  flex-shrink: 0;
+  box-sizing: border-box;
 }
 
 .copy-mode-linenr-overlay .copy-mode-linenr.current {

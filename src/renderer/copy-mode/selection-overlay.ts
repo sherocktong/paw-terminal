@@ -87,6 +87,7 @@ export class SelectionOverlay {
       this.overlay.remove();
       this.overlay = null;
     }
+    this.container.querySelectorAll('.copy-mode-selection-overlay').forEach((el) => el.remove());
     this.cachedCharWidth = null;
     this.cachedLineHeight = null;
   }
@@ -116,6 +117,16 @@ export class SelectionOverlay {
   }
 
   private measure(font: Config['font']): { charWidth: number; lineHeight: number } {
+    const row = this.container.querySelector('.xterm-rows > div') as HTMLElement | null;
+    if (row) {
+      const text = row.textContent || '';
+      const nonEmptyLength = text.length || 1;
+      return {
+        charWidth: row.offsetWidth / nonEmptyLength,
+        lineHeight: row.offsetHeight,
+      };
+    }
+
     const el = document.createElement('span');
     el.textContent = 'M';
     el.style.fontFamily = font.family || 'monospace';

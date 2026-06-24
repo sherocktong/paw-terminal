@@ -103,6 +103,12 @@ export class CopyMode {
     this.container.classList.remove('copy-mode-active');
     this.term.focus();
 
+    // Defensive: ensure overlays are removed after any pending render frame.
+    requestAnimationFrame(() => {
+      this.selectionOverlay.clear();
+      this.lineNumberOverlay.clear();
+    });
+
     this.keyHandlerInstance.reset();
     this.isSearching = false;
   }
@@ -271,6 +277,10 @@ export class CopyMode {
         this.exit();
         return;
     }
+
+    // Commands such as yank leave copy mode; skip further UI updates if we are
+    // no longer active.
+    if (!this.state.active) return;
 
     this.clampCursor();
     this.ensureCursorInView();
@@ -875,6 +885,10 @@ export class CopyMode {
   }
 
   private updateLineNumbers(): void {
+    if (!this.state.active) {
+      this.lineNumberOverlay.clear();
+      return;
+    }
     this.lineNumberOverlay.render(
       this.term.buffer.active.viewportY,
       this.term.rows,
