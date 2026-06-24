@@ -9,12 +9,18 @@ export class VisualRenderer {
   private lineElements: HTMLElement[] = [];
   private theme: Theme;
   private font: Config['font'];
+  private cursorStyle: Config['cursorStyle'] = 'block';
+  private cursorBlink: boolean = false;
+  private cachedCharWidth: number | null = null;
   private lastBufferLines: string[] = [];
+  private pendingScrollLine: number | null = null;
 
-  constructor(container: HTMLElement, theme: Theme, font: Config['font']) {
+  constructor(container: HTMLElement, theme: Theme, font: Config['font'], cursorStyle?: Config['cursorStyle'], cursorBlink?: boolean) {
     this.container = container;
     this.theme = theme;
     this.font = font;
+    this.cursorStyle = cursorStyle ?? 'block';
+    this.cursorBlink = cursorBlink ?? false;
   }
 
   setTheme(theme: Theme): void {
@@ -24,6 +30,19 @@ export class VisualRenderer {
   setFont(font: Config['font']): void {
     this.font = font;
     this.cachedCharWidth = null;
+  }
+
+  setCursorStyle(cursorStyle: Config['cursorStyle'], cursorBlink: boolean): void {
+    this.cursorStyle = cursorStyle;
+    this.cursorBlink = cursorBlink;
+  }
+
+  private updateStatusBarTheme(): void {
+    if (!this.statusBar) return;
+    this.statusBar.style.background = this.theme.colors.selectionBackground;
+    this.statusBar.style.color = this.theme.colors.foreground;
+    this.statusBar.style.fontFamily = this.font.family || 'monospace';
+    this.statusBar.style.fontSize = `${this.font.size}px`;
   }
 
   render(state: CopyModeState): void {
@@ -38,9 +57,12 @@ export class VisualRenderer {
 
     if (!this.overlay) return;
 
-    this.overlay.style.fontFamily = this.font.family;
+    this.overlay.style.fontFamily = this.font.family || 'monospace';
     this.overlay.style.fontSize = `${this.font.size}px`;
     this.overlay.style.lineHeight = `${this.font.lineHeight}`;
+    this.overlay.style.background = this.theme.colors.background;
+    this.overlay.style.color = this.theme.colors.foreground;
+    this.updateStatusBarTheme();
 
     const gutterWidth = this.getGutterWidth(state.bufferLines.length);
     const bufferChanged = this.lastBufferLines.length !== state.bufferLines.length ||
@@ -50,6 +72,7 @@ export class VisualRenderer {
       // Full rebuild: buffer content changed
       this.overlay.innerHTML = '';
       this.lineElements = [];
+      this.cachedCharWidth = null;
 
       for (let i = 0; i < state.bufferLines.length; i++) {
         const rowEl = document.createElement('div');
@@ -98,7 +121,7 @@ export class VisualRenderer {
     if (oldCursor) oldCursor.remove();
 
     const cursorEl = document.createElement('div');
-    cursorEl.className = 'copy-mode-cursor';
+    cursorEl.className = `copy-mode-cursor copy-mode-cursor-${this.cursorStyle}` + (this.cursorBlink ? ' copy-mode-cursor-blink' : '');
 
     const targetLine = Math.min(state.cursor.line, this.lineElements.length - 1);
     const targetRow = this.lineElements[targetLine];
@@ -106,57 +129,81 @@ export class VisualRenderer {
 
     let cursorTop = 0;
     let cursorHeight = this.getLineHeight();
-    let cursorLeft = 0;
+    let cursorWidth = this.cachedCharWidth ?? this.getCharWidth();
 
     if (targetRow && targetText && this.overlay) {
-      const charRect = this.getCharRect(targetText, state.cursor.col);
-      if (charRect) {
-        cursorLeft = charRect.left;
-        cursorTop = charRect.top;
-        cursorHeight = charRect.height;
-      } else {
-        // Empty line: place cursor at the start of the row.
-        cursorLeft = targetText.offsetLeft;
-        cursorTop = targetRow.offsetTop;
-        cursorHeight = targetRow.offsetHeight || this.getLineHeight();
+      // Use offsetTop/offsetHeight instead of getBoundingClientRect() because
+      // the latter returns viewport-relative coordinates that break when rows
+      // are scrolled far outside the visible area.
+      cursorTop = targetRow.offsetTop;
+      cursorHeight = targetRow.offsetHeight;
+
+      if (this.cachedCharWidth === null) {
+        const firstText = this.lineElements[0]?.querySelector('.copy-mode-line') as HTMLElement | null;
+        if (firstText && firstText.textContent) {
+          this.cachedCharWidth = firstText.offsetWidth / Math.max(1, firstText.textContent.length);
+        } else {
+          this.cachedCharWidth = this.getCharWidth();
+        }
       }
 
-      cursorEl.style.left = `${cursorLeft}px`;
+      cursorWidth = this.cachedCharWidth;
+      cursorEl.style.left = `${targetText.offsetLeft + state.cursor.col * this.cachedCharWidth}px`;
       cursorEl.style.top = `${cursorTop}px`;
       cursorEl.style.height = `${cursorHeight}px`;
     } else {
-      const charWidth = this.getCharWidth();
+      const charWidth = this.cachedCharWidth ?? this.getCharWidth();
       const lineHeight = this.getLineHeight();
       const gutterPx = (gutterWidth + 1) * charWidth + 8;
-      cursorLeft = gutterPx + state.cursor.col * charWidth;
+      cursorWidth = charWidth;
+      cursorEl.style.left = `${gutterPx + state.cursor.col * charWidth}px`;
       cursorTop = state.cursor.line * lineHeight;
-      cursorHeight = lineHeight;
-      cursorEl.style.left = `${cursorLeft}px`;
       cursorEl.style.top = `${cursorTop}px`;
+      cursorHeight = lineHeight;
+    }
+
+    // Apply terminal-like cursor dimensions
+    if (this.cursorStyle === 'bar') {
+      cursorEl.style.width = '2px';
+      cursorEl.style.height = `${cursorHeight}px`;
+    } else if (this.cursorStyle === 'underline') {
+      cursorEl.style.width = `${cursorWidth}px`;
+      cursorEl.style.height = '2px';
+      cursorEl.style.top = `${cursorTop + cursorHeight - 2}px`;
+    } else {
+      cursorEl.style.width = `${cursorWidth}px`;
       cursorEl.style.height = `${cursorHeight}px`;
     }
 
     this.overlay.appendChild(cursorEl);
 
-    // Explicit scroll management: keep cursor in view
-    // Account for the status bar that overlays the bottom of the container
-    const statusBarHeight = this.statusBar?.offsetHeight ?? 24;
-    const visibleTop = this.overlay.scrollTop;
-    const visibleBottom = visibleTop + this.overlay.clientHeight - statusBarHeight;
+    if (this.pendingScrollLine !== null && this.lineElements[this.pendingScrollLine]) {
+      // On first entry, keep the overlay aligned with the terminal viewport
+      // rather than jumping to the bottom of the buffer.
+      this.overlay.scrollTop = this.lineElements[this.pendingScrollLine].offsetTop;
+      this.pendingScrollLine = null;
+    } else {
+      // Explicit scroll management: keep cursor in view
+      // Account for the status bar that overlays the bottom of the container
+      const statusBarHeight = this.statusBar?.offsetHeight ?? 24;
+      const visibleTop = this.overlay.scrollTop;
+      const visibleBottom = visibleTop + this.overlay.clientHeight - statusBarHeight;
 
-    if (cursorTop < visibleTop) {
-      this.overlay.scrollTop = cursorTop;
-    } else if (cursorTop + cursorHeight > visibleBottom) {
-      this.overlay.scrollTop = cursorTop + cursorHeight - (this.overlay.clientHeight - statusBarHeight);
+      if (cursorTop < visibleTop) {
+        this.overlay.scrollTop = cursorTop;
+      } else if (cursorTop + cursorHeight > visibleBottom) {
+        this.overlay.scrollTop = cursorTop + cursorHeight - (this.overlay.clientHeight - statusBarHeight);
+      }
     }
 
+    this.updateStatusBarTheme();
     this.updateStatusBar(state);
   }
 
   private createOverlay(): void {
     this.overlay = document.createElement('div');
     this.overlay.className = 'copy-mode-overlay';
-    this.overlay.style.fontFamily = this.font.family;
+    this.overlay.style.fontFamily = this.font.family || 'monospace';
     this.overlay.style.fontSize = `${this.font.size}px`;
     this.overlay.style.lineHeight = `${this.font.lineHeight}`;
     this.container.appendChild(this.overlay);
@@ -242,10 +289,9 @@ export class VisualRenderer {
     if (!this.statusText) return;
 
     const mode = state.subMode === 'normal' ? 'NORMAL' : state.subMode === 'visual' ? 'VISUAL' : 'V-LINE';
-    const alt = state.isAlternate ? ' ALT' : '';
     const pos = `${state.cursor.line + 1}:${state.cursor.col + 1}`;
     const search = state.searchQuery ? ` /${state.searchQuery}/` : '';
-    this.statusText.textContent = `-- ${mode}${alt} -- ${pos}${search}`;
+    this.statusText.textContent = `-- ${mode} -- ${pos}${search}`;
   }
 
   showSearchInput(initialValue = '', direction: 'forward' | 'backward' = 'forward'): void {
@@ -284,58 +330,17 @@ export class VisualRenderer {
     this.statusText = null;
     this.searchInput = null;
     this.lineElements = [];
+    this.cachedCharWidth = null;
     this.lastBufferLines = [];
+    this.pendingScrollLine = null;
   }
 
   focus(): void {
     this.overlay?.focus();
   }
 
-  private getCharRect(lineEl: HTMLElement, col: number): { left: number; top: number; height: number } | null {
-    if (!this.overlay) return null;
-
-    const text = lineEl.textContent ?? '';
-    const maxCol = Math.max(0, text.length - 1);
-    const targetCol = Math.min(col, maxCol);
-
-    const nodeAndOffset = this.getTextNodeAndOffset(lineEl, targetCol);
-    if (!nodeAndOffset) return null;
-
-    const [textNode, offset] = nodeAndOffset;
-    try {
-      const range = document.createRange();
-      range.setStart(textNode, offset);
-      range.setEnd(textNode, Math.min(offset + 1, textNode.length));
-      const rect = range.getBoundingClientRect();
-      const overlayRect = this.overlay.getBoundingClientRect();
-
-      let left = rect.left - overlayRect.left;
-      const top = rect.top - overlayRect.top;
-      const height = rect.height;
-
-      if (col > maxCol) {
-        // Cursor is past the last character; place it after the last char.
-        left += rect.width;
-      }
-
-      return { left, top, height };
-    } catch {
-      return null;
-    }
-  }
-
-  private getTextNodeAndOffset(element: HTMLElement, offset: number): [Text, number] | null {
-    let remaining = offset;
-    const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
-    let node: Node | null;
-    while ((node = walker.nextNode())) {
-      const text = node.textContent ?? '';
-      if (remaining < text.length) {
-        return [node as Text, remaining];
-      }
-      remaining -= text.length;
-    }
-    return null;
+  scrollToLine(line: number): void {
+    this.pendingScrollLine = line;
   }
 
   private getGutterWidth(totalLines: number): number {

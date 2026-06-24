@@ -188,19 +188,17 @@ body {
   top: 0;
   left: 0;
   right: 0;
-  bottom: 0;
+  bottom: 24px;
   overflow: auto;
   font-family: Menlo, Monaco, "Courier New", monospace;
   font-size: 14px;
   line-height: 1.2;
   padding: 4px;
-  padding-bottom: 24px;
+  padding-bottom: 0;
   background: var(--copy-mode-bg, #282a36);
   color: var(--copy-mode-fg, #f8f8f2);
   z-index: 100;
-  white-space: pre-wrap;
-  word-break: normal;
-  overflow-wrap: break-word;
+  white-space: pre;
   cursor: text;
   user-select: none;
 }
@@ -208,9 +206,6 @@ body {
 .copy-mode-line {
   display: block;
   min-height: 1.2em;
-  white-space: pre-wrap;
-  word-break: normal;
-  overflow-wrap: break-word;
 }
 
 .copy-mode-row {
@@ -240,6 +235,30 @@ body {
   background: var(--copy-mode-cursor, #f8f8f2);
   opacity: 0.6;
   pointer-events: none;
+}
+
+.copy-mode-cursor-bar,
+.copy-mode-cursor-underline {
+  opacity: 1;
+}
+
+.copy-mode-cursor-blink {
+  animation: copy-mode-cursor-blink 1s step-end infinite;
+}
+
+.copy-mode-cursor-bar.copy-mode-cursor-blink,
+.copy-mode-cursor-underline.copy-mode-cursor-blink {
+  animation-name: copy-mode-cursor-blink-solid;
+}
+
+@keyframes copy-mode-cursor-blink {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 0; }
+}
+
+@keyframes copy-mode-cursor-blink-solid {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
 }
 
 .copy-mode-selection {

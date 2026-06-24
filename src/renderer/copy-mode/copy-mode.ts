@@ -1,7 +1,6 @@
 import { Terminal } from '@xterm/xterm';
 import type { Config, CopyModeState, CopyModePosition, CopyModeSubMode, Theme } from '../../shared/types';
 import { captureBuffer } from './buffer-capture';
-import { BufferSnapshotManager } from './buffer-snapshot';
 import { KeyHandler, type ParsedCommand } from './key-handler';
 import { searchBuffer, type SearchResult } from './search';
 import { VisualRenderer } from './visual-renderer';
@@ -12,7 +11,6 @@ export class CopyMode {
   private container: HTMLElement;
   private config: Config;
   private themeManager: ThemeManager;
-  private snapshotManager: BufferSnapshotManager | null;
   private state: CopyModeState;
   private renderer: VisualRenderer;
   private keyHandlerInstance = new KeyHandler();
@@ -20,19 +18,12 @@ export class CopyMode {
   private isSearching = false;
   private lastSearchQuery = '';
 
-  constructor(
-    term: Terminal,
-    container: HTMLElement,
-    config: Config,
-    themeManager: ThemeManager,
-    snapshotManager: BufferSnapshotManager | null = null
-  ) {
+  constructor(term: Terminal, container: HTMLElement, config: Config, themeManager: ThemeManager) {
     this.term = term;
     this.container = container;
     this.config = config;
     this.themeManager = themeManager;
-    this.snapshotManager = snapshotManager;
-    this.renderer = new VisualRenderer(container, themeManager.getCurrentTheme(), config.font);
+    this.renderer = new VisualRenderer(container, themeManager.getCurrentTheme(), config.font, config.cursorStyle, config.cursorBlink);
     this.state = this.createInitialState();
   }
 
@@ -40,7 +31,7 @@ export class CopyMode {
     this.config = config;
     this.renderer.setTheme(this.themeManager.getCurrentTheme());
     this.renderer.setFont(config.font);
-    this.snapshotManager?.setMaxLines(config.scrollback);
+    this.renderer.setCursorStyle(config.cursorStyle, config.cursorBlink);
     if (this.state.active) {
       this.renderer.render(this.state);
     }
@@ -66,12 +57,9 @@ export class CopyMode {
   enter(): void {
     if (this.state.active) return;
 
-    const snapshot = this.snapshotManager?.getSnapshot() ?? {
-      lines: captureBuffer(this.term),
-      isAlternate: false,
-    };
-    const bufferLines = snapshot.lines;
-    const cursorLine = bufferLines.length > 0 ? bufferLines.length - 1 : 0;
+    const bufferLines = captureBuffer(this.term);
+    const viewportY = this.term.buffer.active.viewportY;
+    const cursorLine = bufferLines.length > 0 ? Math.min(viewportY, bufferLines.length - 1) : 0;
 
     this.state = {
       active: true,
@@ -82,11 +70,11 @@ export class CopyMode {
       searchResults: [],
       currentSearchIndex: -1,
       bufferLines,
-      isAlternate: snapshot.isAlternate,
     };
 
     this.term.blur();
     this.term.element?.classList.add('copy-mode-active');
+    this.renderer.scrollToLine(cursorLine);
     this.renderer.render(this.state);
   }
 
