@@ -892,7 +892,8 @@ export class CopyMode {
     this.lineNumberOverlay.render(
       this.term.buffer.active.viewportY,
       this.term.rows,
-      this.state.cursor.line
+      this.state.cursor.line,
+      (index) => this.term.buffer.active.getLine(index) ?? undefined
     );
   }
 

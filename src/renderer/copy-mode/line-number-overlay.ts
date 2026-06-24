@@ -1,5 +1,12 @@
 import type { Config, Theme } from '../../shared/types';
 
+interface BufferLineLike {
+  isWrapped: boolean;
+}
+
+/** Returns undefined if the buffer line is out of range. */
+type GetBufferLine = (index: number) => BufferLineLike | undefined;
+
 /**
  * A narrow overlay that renders relative line numbers on the left side of the
  * terminal. The actual buffer content is rendered by xterm.js; this overlay
@@ -29,26 +36,74 @@ export class LineNumberOverlay {
     this.applyTheme();
   }
 
-  render(viewportY: number, rows: number, cursorLine: number): void {
+  render(viewportY: number, rows: number, cursorLine: number, getLine?: GetBufferLine): void {
     this.ensureOverlay();
     if (!this.overlay) return;
 
-    const metrics = this.measureXtermCell();
+    const containerRect = this.container.getBoundingClientRect();
+    const rowsContainer = this.container.querySelector('.xterm-rows') as HTMLElement | null;
+
+    // Align the gutter's top edge with the actual xterm rows container so the
+    // first line number sits exactly on top of the first visible row.
+    let overlayTop = 0;
+    if (rowsContainer) {
+      overlayTop = rowsContainer.getBoundingClientRect().top - containerRect.top;
+    }
+    this.overlay.style.top = `${overlayTop}px`;
     this.overlay.innerHTML = '';
+
+    // Use xterm's actual font metrics so the numbers render with the same
+    // baseline as the terminal text.
+    const xtermFont = this.getXtermFont();
 
     for (let i = 0; i < rows; i++) {
       const line = viewportY + i;
+      const bufferLine = getLine?.(line);
+      const isWrapped = bufferLine?.isWrapped ?? false;
+
+      // In xterm.js wrapped lines are stored as multiple buffer lines; only the
+      // first (non-wrapped) one gets a line number, matching vim behavior.
+      if (isWrapped) continue;
+
       const isCurrent = line === cursorLine;
       const relNum = isCurrent ? line + 1 : Math.abs(line - cursorLine);
       const text = String(relNum).padStart(3, ' ');
 
       const el = document.createElement('div');
       el.className = 'copy-mode-linenr' + (isCurrent ? ' current' : '');
-      el.textContent = text;
-      el.style.height = `${metrics.lineHeight}px`;
-      el.style.display = 'flex';
-      el.style.alignItems = 'center';
-      el.style.justifyContent = 'flex-end';
+      // Render the number inside a span that mimics xterm.js's cell spans so the
+      // text baseline and vertical metrics match the terminal text exactly.
+      const span = document.createElement('span');
+      span.textContent = text;
+      span.style.display = 'inline-block';
+      span.style.width = '100%';
+      span.style.height = '100%';
+      span.style.verticalAlign = 'top';
+      span.style.lineHeight = 'inherit';
+      span.style.textAlign = 'right';
+      el.appendChild(span);
+      el.style.fontFamily = xtermFont.family;
+      el.style.fontSize = xtermFont.size;
+      el.style.left = '0';
+      el.style.right = '0';
+
+      // Position each number at the exact bounding rect of the matching xterm
+      // row. This avoids any drift from rounding or sub-pixel rendering.
+      const row = this.container.querySelector(`.xterm-rows > div:nth-child(${i + 1})`) as HTMLElement | null;
+      if (row) {
+        const rowRect = row.getBoundingClientRect();
+        el.style.position = 'absolute';
+        el.style.top = `${rowRect.top - containerRect.top - overlayTop}px`;
+        el.style.height = `${rowRect.height}px`;
+        el.style.lineHeight = `${rowRect.height}px`;
+      } else {
+        const metrics = this.measureXtermCell();
+        el.style.position = 'absolute';
+        el.style.top = `${i * metrics.lineHeight}px`;
+        el.style.height = `${metrics.lineHeight}px`;
+        el.style.lineHeight = `${metrics.lineHeight}px`;
+      }
+
       this.overlay.appendChild(el);
     }
   }
@@ -82,12 +137,29 @@ export class LineNumberOverlay {
    * Measure xterm.js's actual rendered cell dimensions so the gutter rows line
    * up exactly with the terminal rows.
    */
+  /**
+   * Read xterm.js's actual computed font so the gutter numbers render with the
+   * same face, size and baseline as the terminal text.
+   */
+  private getXtermFont(): { family: string; size: string } {
+    const row = this.container.querySelector('.xterm-rows > div') as HTMLElement | null;
+    if (row) {
+      const style = getComputedStyle(row);
+      return { family: style.fontFamily, size: style.fontSize };
+    }
+    return {
+      family: this.font.family || 'monospace',
+      size: `${this.font.size}px`,
+    };
+  }
+
   private measureXtermCell(): { lineHeight: number; charWidth: number } {
     const row = this.container.querySelector('.xterm-rows > div') as HTMLElement | null;
     if (row) {
+      const rect = row.getBoundingClientRect();
       return {
-        lineHeight: row.offsetHeight,
-        charWidth: row.offsetWidth / Math.max(1, row.textContent?.length ?? 0),
+        lineHeight: rect.height,
+        charWidth: rect.width / Math.max(1, row.textContent?.length ?? 0),
       };
     }
     return this.fallbackMeasure();
@@ -96,8 +168,9 @@ export class LineNumberOverlay {
   private fallbackMeasure(): { lineHeight: number; charWidth: number } {
     const el = document.createElement('span');
     el.textContent = 'M';
-    el.style.fontFamily = this.font.family || 'monospace';
-    el.style.fontSize = `${this.font.size}px`;
+    const font = this.getXtermFont();
+    el.style.fontFamily = font.family;
+    el.style.fontSize = font.size;
     el.style.lineHeight = `${this.font.lineHeight}`;
     el.style.position = 'absolute';
     el.style.visibility = 'hidden';

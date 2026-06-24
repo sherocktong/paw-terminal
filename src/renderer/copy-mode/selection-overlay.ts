@@ -42,6 +42,17 @@ export class SelectionOverlay {
     this.ensureOverlay();
     if (!this.overlay) return;
 
+    const containerRect = this.container.getBoundingClientRect();
+    const rowsContainer = this.container.querySelector('.xterm-rows') as HTMLElement | null;
+
+    // Align the overlay top with the actual xterm rows container so highlights
+    // sit exactly over the corresponding rows.
+    let overlayTop = 0;
+    if (rowsContainer) {
+      overlayTop = rowsContainer.getBoundingClientRect().top - containerRect.top;
+    }
+    this.overlay.style.top = `${overlayTop}px`;
+
     const lineHeight = this.getLineHeight(font);
     const charWidth = this.getCharWidth(font);
 
@@ -75,9 +86,20 @@ export class SelectionOverlay {
       span.className = 'copy-mode-selection-span';
       span.style.position = 'absolute';
       span.style.left = `${col * charWidth}px`;
-      span.style.top = `${(line - viewportY) * lineHeight}px`;
+
+      // Place the highlight at the exact bounding rect of the matching xterm
+      // row for pixel-perfect alignment.
+      const row = this.container.querySelector(`.xterm-rows > div:nth-child(${line - viewportY + 1})`) as HTMLElement | null;
+      if (row) {
+        const rowRect = row.getBoundingClientRect();
+        span.style.top = `${rowRect.top - containerRect.top - overlayTop}px`;
+        span.style.height = `${rowRect.height}px`;
+      } else {
+        span.style.top = `${(line - viewportY) * lineHeight}px`;
+        span.style.height = `${lineHeight}px`;
+      }
+
       span.style.width = `${length * charWidth}px`;
-      span.style.height = `${lineHeight}px`;
       this.overlay.appendChild(span);
     }
   }

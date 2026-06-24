@@ -204,7 +204,7 @@ body {
   left: 0;
   bottom: 24px;
   width: 4ch;
-  padding: 4px 4px 4px 8px;
+  padding: 4px 2px 4px 4px;
   pointer-events: none;
   z-index: 98;
   display: flex;
@@ -215,16 +215,13 @@ body {
 }
 
 .copy-mode-linenr-overlay .copy-mode-linenr {
-  font-family: Menlo, Monaco, "Courier New", monospace;
   color: var(--copy-mode-linenr, #6272a4);
   user-select: none;
-  flex-shrink: 0;
   box-sizing: border-box;
 }
 
 .copy-mode-linenr-overlay .copy-mode-linenr.current {
   color: var(--copy-mode-linenr-current, #f8f8f2);
-  font-weight: bold;
 }
 
 /* Shift xterm.js content right when copy mode is active to make room for the
