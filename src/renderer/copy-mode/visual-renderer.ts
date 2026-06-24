@@ -9,7 +9,6 @@ export class VisualRenderer {
   private lineElements: HTMLElement[] = [];
   private theme: Theme;
   private font: Config['font'];
-  private cachedCharWidth: number | null = null;
   private lastBufferLines: string[] = [];
 
   constructor(container: HTMLElement, theme: Theme, font: Config['font']) {
@@ -51,7 +50,6 @@ export class VisualRenderer {
       // Full rebuild: buffer content changed
       this.overlay.innerHTML = '';
       this.lineElements = [];
-      this.cachedCharWidth = null;
 
       for (let i = 0; i < state.bufferLines.length; i++) {
         const rowEl = document.createElement('div');
@@ -108,34 +106,34 @@ export class VisualRenderer {
 
     let cursorTop = 0;
     let cursorHeight = this.getLineHeight();
+    let cursorLeft = 0;
 
     if (targetRow && targetText && this.overlay) {
-      // Use offsetTop/offsetHeight instead of getBoundingClientRect() because
-      // the latter returns viewport-relative coordinates that break when rows
-      // are scrolled far outside the visible area.
-      cursorTop = targetRow.offsetTop;
-      cursorHeight = targetRow.offsetHeight;
-
-      if (this.cachedCharWidth === null) {
-        const firstText = this.lineElements[0]?.querySelector('.copy-mode-line') as HTMLElement | null;
-        if (firstText && firstText.textContent) {
-          this.cachedCharWidth = firstText.offsetWidth / Math.max(1, firstText.textContent.length);
-        } else {
-          this.cachedCharWidth = this.getCharWidth();
-        }
+      const charRect = this.getCharRect(targetText, state.cursor.col);
+      if (charRect) {
+        cursorLeft = charRect.left;
+        cursorTop = charRect.top;
+        cursorHeight = charRect.height;
+      } else {
+        // Empty line: place cursor at the start of the row.
+        cursorLeft = targetText.offsetLeft;
+        cursorTop = targetRow.offsetTop;
+        cursorHeight = targetRow.offsetHeight || this.getLineHeight();
       }
 
-      cursorEl.style.left = `${targetText.offsetLeft + state.cursor.col * this.cachedCharWidth}px`;
+      cursorEl.style.left = `${cursorLeft}px`;
       cursorEl.style.top = `${cursorTop}px`;
       cursorEl.style.height = `${cursorHeight}px`;
     } else {
-      const charWidth = this.cachedCharWidth ?? this.getCharWidth();
+      const charWidth = this.getCharWidth();
       const lineHeight = this.getLineHeight();
       const gutterPx = (gutterWidth + 1) * charWidth + 8;
-      cursorEl.style.left = `${gutterPx + state.cursor.col * charWidth}px`;
+      cursorLeft = gutterPx + state.cursor.col * charWidth;
       cursorTop = state.cursor.line * lineHeight;
-      cursorEl.style.top = `${cursorTop}px`;
       cursorHeight = lineHeight;
+      cursorEl.style.left = `${cursorLeft}px`;
+      cursorEl.style.top = `${cursorTop}px`;
+      cursorEl.style.height = `${cursorHeight}px`;
     }
 
     this.overlay.appendChild(cursorEl);
@@ -244,9 +242,10 @@ export class VisualRenderer {
     if (!this.statusText) return;
 
     const mode = state.subMode === 'normal' ? 'NORMAL' : state.subMode === 'visual' ? 'VISUAL' : 'V-LINE';
+    const alt = state.isAlternate ? ' ALT' : '';
     const pos = `${state.cursor.line + 1}:${state.cursor.col + 1}`;
     const search = state.searchQuery ? ` /${state.searchQuery}/` : '';
-    this.statusText.textContent = `-- ${mode} -- ${pos}${search}`;
+    this.statusText.textContent = `-- ${mode}${alt} -- ${pos}${search}`;
   }
 
   showSearchInput(initialValue = '', direction: 'forward' | 'backward' = 'forward'): void {
@@ -285,12 +284,58 @@ export class VisualRenderer {
     this.statusText = null;
     this.searchInput = null;
     this.lineElements = [];
-    this.cachedCharWidth = null;
     this.lastBufferLines = [];
   }
 
   focus(): void {
     this.overlay?.focus();
+  }
+
+  private getCharRect(lineEl: HTMLElement, col: number): { left: number; top: number; height: number } | null {
+    if (!this.overlay) return null;
+
+    const text = lineEl.textContent ?? '';
+    const maxCol = Math.max(0, text.length - 1);
+    const targetCol = Math.min(col, maxCol);
+
+    const nodeAndOffset = this.getTextNodeAndOffset(lineEl, targetCol);
+    if (!nodeAndOffset) return null;
+
+    const [textNode, offset] = nodeAndOffset;
+    try {
+      const range = document.createRange();
+      range.setStart(textNode, offset);
+      range.setEnd(textNode, Math.min(offset + 1, textNode.length));
+      const rect = range.getBoundingClientRect();
+      const overlayRect = this.overlay.getBoundingClientRect();
+
+      let left = rect.left - overlayRect.left;
+      const top = rect.top - overlayRect.top;
+      const height = rect.height;
+
+      if (col > maxCol) {
+        // Cursor is past the last character; place it after the last char.
+        left += rect.width;
+      }
+
+      return { left, top, height };
+    } catch {
+      return null;
+    }
+  }
+
+  private getTextNodeAndOffset(element: HTMLElement, offset: number): [Text, number] | null {
+    let remaining = offset;
+    const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+    let node: Node | null;
+    while ((node = walker.nextNode())) {
+      const text = node.textContent ?? '';
+      if (remaining < text.length) {
+        return [node as Text, remaining];
+      }
+      remaining -= text.length;
+    }
+    return null;
   }
 
   private getGutterWidth(totalLines: number): number {

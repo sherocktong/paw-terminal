@@ -91,6 +91,7 @@ export interface CopyModeState {
   searchResults: CopyModePosition[];
   currentSearchIndex: number;
   bufferLines: string[];
+  isAlternate?: boolean;
 }
 
 export interface IpcChannels {

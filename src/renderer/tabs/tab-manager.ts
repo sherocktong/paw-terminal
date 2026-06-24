@@ -5,6 +5,7 @@ import type { Config } from '../../shared/types';
 import { initializeTerminal, resizeTerminal } from '../terminal/terminal';
 import { ThemeManager } from '../theme/theme-manager';
 import { CopyMode } from '../copy-mode/copy-mode';
+import { BufferSnapshotManager } from '../copy-mode/buffer-snapshot';
 import { ShortcutsPanel } from '../shortcuts-panel/shortcuts-panel';
 
 interface Tab {
@@ -18,6 +19,7 @@ interface Tab {
   term: Terminal;
   fitAddon: FitAddon;
   copyMode: CopyMode;
+  snapshotManager: BufferSnapshotManager;
   container: HTMLElement;
   onDataUnsubscribe: () => void;
   onInputUnsubscribe: () => void; // term.onData → shell.write
@@ -82,7 +84,8 @@ export class TabManager {
     term.loadAddon(fitAddon);
     term.loadAddon(new WebLinksAddon());
 
-    const copyMode = new CopyMode(term, container, this.config, this.themeManager);
+    const snapshotManager = new BufferSnapshotManager(term, this.config.scrollback);
+    const copyMode = new CopyMode(term, container, this.config, this.themeManager, snapshotManager);
 
     // Prevent xterm.js from sending keys to the PTY while copy mode is active,
     // so TUI apps (e.g. Claude Code) don't also receive hjkl/G/etc.
@@ -110,6 +113,7 @@ export class TabManager {
       term,
       fitAddon,
       copyMode,
+      snapshotManager,
       container,
       onDataUnsubscribe: () => {},
       onInputUnsubscribe: () => inputDisposable.dispose(),
@@ -138,6 +142,14 @@ export class TabManager {
         : `\r\n[Process exited]\r\n`;
       targetTab.term.write(msg);
     });
+
+    // Dispose the alternate-buffer snapshot manager when the tab closes so it
+    // stops listening to terminal writes and releases its history.
+    const originalOnExit = tab.onExitUnsubscribe;
+    tab.onExitUnsubscribe = () => {
+      snapshotManager.dispose();
+      originalOnExit();
+    };
 
     // Register OSC handlers for title (0/1/2) and CWD (7)
     this.registerOscTitleHandlers(term, tab);

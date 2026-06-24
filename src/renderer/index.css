@@ -198,7 +198,9 @@ body {
   background: var(--copy-mode-bg, #282a36);
   color: var(--copy-mode-fg, #f8f8f2);
   z-index: 100;
-  white-space: pre;
+  white-space: pre-wrap;
+  word-break: normal;
+  overflow-wrap: break-word;
   cursor: text;
   user-select: none;
 }
@@ -206,6 +208,9 @@ body {
 .copy-mode-line {
   display: block;
   min-height: 1.2em;
+  white-space: pre-wrap;
+  word-break: normal;
+  overflow-wrap: break-word;
 }
 
 .copy-mode-row {
