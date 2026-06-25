@@ -144,8 +144,9 @@ export class TabManager {
     this.registerOsc7Handler(term, tab);
 
     this.themeManager.addTerminal(term);
-    this.tabs.push(tab);
-    this.activateTab(this.tabs.length - 1);
+    const insertIndex = this.activeIndex >= 0 ? this.activeIndex + 1 : this.tabs.length;
+    this.tabs.splice(insertIndex, 0, tab);
+    this.activateTab(insertIndex);
 
     // Ensure polling is running
     this.startCwdPolling();
