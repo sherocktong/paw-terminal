@@ -46,6 +46,10 @@
       "output": "release"
     },
     "npmRebuild": false,
+    "afterPack": "scripts/after-pack.cjs",
+    "asarUnpack": [
+      "**/node_modules/node-pty/**"
+    ],
     "files": [
       "dist",
       "assets"
