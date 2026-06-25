@@ -19,6 +19,7 @@ export class CopyMode {
   private lineNumberOverlay: LineNumberOverlay;
   private keyHandlerInstance = new KeyHandler();
   private searchDirection: 'forward' | 'backward' = 'forward';
+  private lastSearchDirection: 'forward' | 'backward' = 'forward';
   private isSearching = false;
   private lastSearchQuery = '';
   private originalSelectionBg: string | undefined;
@@ -333,49 +334,71 @@ export class CopyMode {
     this.selectionOverlay.clear();
     this.term.clearSelection();
 
-    if (this.state.subMode === 'normal') {
-      const line = this.state.cursor.line;
-      const col = this.state.cursor.col;
-      const lineText = this.state.bufferLines[line] || '';
-      const safeCol = Math.min(col, Math.max(0, lineText.length - 1));
-      if (lineText.length > 0) {
-        this.term.select(safeCol, line, 1);
+    // Visual mode takes precedence over search highlights.
+    if (this.state.subMode !== 'normal') {
+      if (!this.state.anchor) return;
+
+      if (this.state.subMode === 'visualLine') {
+        const start = Math.min(this.state.anchor.line, this.state.cursor.line);
+        const end = Math.max(this.state.anchor.line, this.state.cursor.line);
+        this.term.selectLines(start, end);
+        return;
+      }
+
+      // visual (char-wise)
+      const anchor = this.state.anchor;
+      const startLine = Math.min(anchor.line, this.state.cursor.line);
+      const endLine = Math.max(anchor.line, this.state.cursor.line);
+      const startCol = Math.min(anchor.col, this.state.cursor.col);
+      const endCol = Math.max(anchor.col, this.state.cursor.col);
+
+      if (startLine === endLine) {
+        const lineText = this.state.bufferLines[startLine] || '';
+        const length = Math.min(endCol - startCol + 1, lineText.length - startCol);
+        if (length > 0) {
+          this.term.select(startCol, startLine, length);
+        }
+      } else {
+        // xterm.js cannot represent multi-line partial selections; use overlay
+        this.selectionOverlay.showSelection(
+          anchor,
+          this.state.cursor,
+          'visual',
+          this.config.font,
+          this.term.buffer.active.viewportY,
+          (line) => this.state.bufferLines[line]?.length ?? 0
+        );
       }
       return;
     }
 
-    if (!this.state.anchor) return;
-
-    if (this.state.subMode === 'visualLine') {
-      const start = Math.min(this.state.anchor.line, this.state.cursor.line);
-      const end = Math.max(this.state.anchor.line, this.state.cursor.line);
-      this.term.selectLines(start, end);
-      return;
-    }
-
-    // visual (char-wise)
-    const anchor = this.state.anchor;
-    const startLine = Math.min(anchor.line, this.state.cursor.line);
-    const endLine = Math.max(anchor.line, this.state.cursor.line);
-    const startCol = Math.min(anchor.col, this.state.cursor.col);
-    const endCol = Math.max(anchor.col, this.state.cursor.col);
-
-    if (startLine === endLine) {
-      const lineText = this.state.bufferLines[startLine] || '';
-      const length = Math.min(endCol - startCol + 1, lineText.length - startCol);
-      if (length > 0) {
-        this.term.select(startCol, startLine, length);
-      }
-    } else {
-      // xterm.js cannot represent multi-line partial selections; use overlay
-      this.selectionOverlay.showSelection(
-        anchor,
-        this.state.cursor,
-        'visual',
-        this.config.font,
+    // Render search highlights when a search is active.
+    if (this.state.searchResults.length > 0 && this.state.currentSearchIndex >= 0) {
+      const currentMatch = this.state.searchResults[this.state.currentSearchIndex];
+      this.selectionOverlay.showSearchMatches(
+        this.state.searchResults,
+        this.state.currentSearchIndex,
         this.term.buffer.active.viewportY,
-        (line) => this.state.bufferLines[line]?.length ?? 0
+        this.config.font,
+        this.themeManager.getCurrentTheme()
       );
+      // Place the cursor at the start of the current match.
+      if (currentMatch) {
+        const lineText = this.state.bufferLines[currentMatch.line] || '';
+        if (lineText.length > 0) {
+          this.term.select(currentMatch.col, currentMatch.line, 1);
+        }
+      }
+      return;
+    }
+
+    // Normal mode cursor.
+    const line = this.state.cursor.line;
+    const col = this.state.cursor.col;
+    const lineText = this.state.bufferLines[line] || '';
+    const safeCol = Math.min(col, Math.max(0, lineText.length - 1));
+    if (lineText.length > 0) {
+      this.term.select(safeCol, line, 1);
     }
   }
 
@@ -781,19 +804,33 @@ export class CopyMode {
   private cancelSearch(): void {
     this.isSearching = false;
     this.statusBar?.hideSearchInput();
+    // Clear only the active search state; keep lastSearchQuery/lastSearchDirection
+    // so n/N can still repeat the previous search.
+    this.state.searchQuery = '';
+    this.state.searchResults = [];
+    this.state.currentSearchIndex = -1;
     this.updateSelection();
     this.statusBar?.update(this.state);
   }
 
   private executeSearch(): void {
-    const query = this.statusBar?.hideSearchInput() ?? '';
+    const input = this.statusBar?.hideSearchInput() ?? '';
     this.isSearching = false;
-    this.lastSearchQuery = query;
 
+    let query = input;
     if (!query) {
-      this.updateSelection();
-      this.statusBar?.update(this.state);
-      return;
+      // Empty query repeats the previous search in the direction of / or ?.
+      if (!this.lastSearchQuery) {
+        this.updateSelection();
+        this.statusBar?.update(this.state);
+        return;
+      }
+      query = this.lastSearchQuery;
+      // Repeating with / or ? sets the direction for subsequent n/N.
+      this.lastSearchDirection = this.searchDirection;
+    } else {
+      this.lastSearchQuery = query;
+      this.lastSearchDirection = this.searchDirection;
     }
 
     this.state.searchQuery = query;
@@ -811,7 +848,7 @@ export class CopyMode {
 
     if (result.currentIndex >= 0 && result.positions.length > 0) {
       const pos = result.positions[result.currentIndex];
-      this.state.cursor = { ...pos };
+      this.state.cursor = { line: pos.line, col: pos.col };
       this.clampCursor();
       this.ensureCursorInView();
     }
@@ -822,61 +859,41 @@ export class CopyMode {
   }
 
   private nextSearch(count: number): void {
-    if (this.state.searchResults.length === 0) {
-      if (this.lastSearchQuery) {
-        this.state.searchQuery = this.lastSearchQuery;
-        const result = searchBuffer(
-          this.state.bufferLines,
-          this.lastSearchQuery,
-          'forward',
-          this.state.cursor
-        );
-        this.state.searchResults = result.positions;
-        this.state.currentSearchIndex = result.currentIndex;
-      } else {
-        return;
-      }
-    }
-
-    if (this.state.searchResults.length === 0) return;
-
-    let idx = this.state.currentSearchIndex + count;
-    if (idx >= this.state.searchResults.length) {
-      idx = 0;
-    }
-    this.state.currentSearchIndex = idx;
-    this.state.cursor = { ...this.state.searchResults[idx] };
-    this.clampCursor();
-    this.ensureCursorInView();
-    this.updateSelection();
-    this.statusBar?.update(this.state);
+    this.navigateSearch(this.lastSearchDirection, count);
   }
 
   private prevSearch(count: number): void {
-    if (this.state.searchResults.length === 0) {
-      if (this.lastSearchQuery) {
-        this.state.searchQuery = this.lastSearchQuery;
-        const result = searchBuffer(
-          this.state.bufferLines,
-          this.lastSearchQuery,
-          'backward',
-          this.state.cursor
-        );
-        this.state.searchResults = result.positions;
-        this.state.currentSearchIndex = result.currentIndex;
-      } else {
-        return;
-      }
-    }
+    const opposite: 'forward' | 'backward' =
+      this.lastSearchDirection === 'forward' ? 'backward' : 'forward';
+    this.navigateSearch(opposite, count);
+  }
 
-    if (this.state.searchResults.length === 0) return;
+  private navigateSearch(direction: 'forward' | 'backward', count: number): void {
+    if (!this.lastSearchQuery) return;
 
-    let idx = this.state.currentSearchIndex - count;
-    if (idx < 0) {
-      idx = this.state.searchResults.length - 1;
-    }
+    const result = searchBuffer(
+      this.state.bufferLines,
+      this.lastSearchQuery,
+      direction,
+      this.state.cursor
+    );
+
+    if (result.positions.length === 0) return;
+
+    let idx = result.currentIndex;
+    if (idx < 0) idx = direction === 'forward' ? 0 : result.positions.length - 1;
+
+    // Advance count matches from the first match in the requested direction.
+    const step = direction === 'forward' ? 1 : -1;
+    idx = (idx + step * (count - 1)) % result.positions.length;
+    if (idx < 0) idx += result.positions.length;
+
+    this.state.searchQuery = this.lastSearchQuery;
+    this.state.searchDirection = direction;
+    this.state.searchResults = result.positions;
     this.state.currentSearchIndex = idx;
-    this.state.cursor = { ...this.state.searchResults[idx] };
+    const pos = result.positions[idx];
+    this.state.cursor = { line: pos.line, col: pos.col };
     this.clampCursor();
     this.ensureCursorInView();
     this.updateSelection();

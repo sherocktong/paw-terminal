@@ -77,6 +77,7 @@ export type AppearanceMode = 'dark' | 'light';
 export interface CopyModePosition {
   line: number;
   col: number;
+  length?: number;
 }
 
 export type CopyModeSubMode = 'normal' | 'visual' | 'visualLine';

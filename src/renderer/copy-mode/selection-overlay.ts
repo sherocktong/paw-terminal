@@ -1,11 +1,12 @@
-import type { Config, CopyModePosition, CopyModeSubMode } from '../../shared/types';
+import type { Config, CopyModePosition, CopyModeSubMode, Theme } from '../../shared/types';
+import type { SearchMatch } from './search';
 
 /**
- * Minimal transparent overlay used only for multi-line visual (char-wise)
- * selections. xterm.js's public selection API cannot represent partial
- * selections that span multiple rows, so we render highlight spans directly
- * over the real terminal cells. Normal-mode cursor and single-line/visualLine
- * selections are handled by xterm.js itself.
+ * Minimal transparent overlay used for:
+ * - Multi-line visual (char-wise) selections (xterm.js cannot represent partial
+ *   selections that span multiple rows).
+ * - Search match highlights (hlsearch-style) because xterm.js cannot highlight
+ *   arbitrary non-selection ranges.
  */
 export class SelectionOverlay {
   private container: HTMLElement;
@@ -14,9 +15,9 @@ export class SelectionOverlay {
   private cachedLineHeight: number | null = null;
 
   constructor(container: HTMLElement) {
-    // Attach to the outer tab container; the selection overlay is positioned
-    // over the terminal content area (which is shifted right by the line-number
-    // gutter via CSS when copy mode is active).
+    // Attach to the outer tab container; the overlay is positioned over the
+    // terminal content area (shifted right by the line-number gutter via CSS
+    // when copy mode is active).
     this.container = container;
   }
 
@@ -42,15 +43,7 @@ export class SelectionOverlay {
     this.ensureOverlay();
     if (!this.overlay) return;
 
-    const containerRect = this.container.getBoundingClientRect();
-    const rowsContainer = this.container.querySelector('.xterm-rows') as HTMLElement | null;
-
-    // Align the overlay top with the actual xterm rows container so highlights
-    // sit exactly over the corresponding rows.
-    let overlayTop = 0;
-    if (rowsContainer) {
-      overlayTop = rowsContainer.getBoundingClientRect().top - containerRect.top;
-    }
+    const overlayTop = this.getOverlayTop();
     this.overlay.style.top = `${overlayTop}px`;
 
     const lineHeight = this.getLineHeight(font);
@@ -86,20 +79,47 @@ export class SelectionOverlay {
       span.className = 'copy-mode-selection-span';
       span.style.position = 'absolute';
       span.style.left = `${col * charWidth}px`;
-
-      // Place the highlight at the exact bounding rect of the matching xterm
-      // row for pixel-perfect alignment.
-      const row = this.container.querySelector(`.xterm-rows > div:nth-child(${line - viewportY + 1})`) as HTMLElement | null;
-      if (row) {
-        const rowRect = row.getBoundingClientRect();
-        span.style.top = `${rowRect.top - containerRect.top - overlayTop}px`;
-        span.style.height = `${rowRect.height}px`;
-      } else {
-        span.style.top = `${(line - viewportY) * lineHeight}px`;
-        span.style.height = `${lineHeight}px`;
-      }
-
+      this.positionSpanAtRow(span, line, viewportY, overlayTop, lineHeight);
       span.style.width = `${length * charWidth}px`;
+      this.overlay.appendChild(span);
+    }
+  }
+
+  /**
+   * Highlight all visible search matches, with the current match styled
+   * distinctly (like Vim's hlsearch + incsearch current match).
+   */
+  showSearchMatches(
+    matches: SearchMatch[],
+    currentIndex: number,
+    viewportY: number,
+    font: Config['font'],
+    theme: Theme
+  ): void {
+    this.clear();
+    this.ensureOverlay();
+    if (!this.overlay || matches.length === 0) return;
+
+    const overlayTop = this.getOverlayTop();
+    this.overlay.style.top = `${overlayTop}px`;
+
+    const lineHeight = this.getLineHeight(font);
+    const charWidth = this.getCharWidth(font);
+
+    const viewportEnd = viewportY + this.getVisibleRows();
+
+    for (let i = 0; i < matches.length; i++) {
+      const match = matches[i];
+      if (match.line < viewportY || match.line >= viewportEnd) continue;
+
+      const span = document.createElement('span');
+      span.className = i === currentIndex
+        ? 'copy-mode-search-match copy-mode-search-current'
+        : 'copy-mode-search-match';
+      span.style.position = 'absolute';
+      span.style.left = `${match.col * charWidth}px`;
+      this.positionSpanAtRow(span, match.line, viewportY, overlayTop, lineHeight);
+      span.style.width = `${match.length * charWidth}px`;
       this.overlay.appendChild(span);
     }
   }
@@ -122,6 +142,42 @@ export class SelectionOverlay {
     this.container.appendChild(this.overlay);
   }
 
+  private getOverlayTop(): number {
+    const containerRect = this.container.getBoundingClientRect();
+    const rowsContainer = this.container.querySelector('.xterm-rows') as HTMLElement | null;
+    if (rowsContainer) {
+      return rowsContainer.getBoundingClientRect().top - containerRect.top;
+    }
+    return 0;
+  }
+
+  private positionSpanAtRow(
+    span: HTMLElement,
+    line: number,
+    viewportY: number,
+    overlayTop: number,
+    fallbackLineHeight: number
+  ): void {
+    const containerRect = this.container.getBoundingClientRect();
+    const row = this.container.querySelector(`.xterm-rows > div:nth-child(${line - viewportY + 1})`) as HTMLElement | null;
+    if (row) {
+      const rowRect = row.getBoundingClientRect();
+      span.style.top = `${rowRect.top - containerRect.top - overlayTop}px`;
+      span.style.height = `${rowRect.height}px`;
+    } else {
+      span.style.top = `${(line - viewportY) * fallbackLineHeight}px`;
+      span.style.height = `${fallbackLineHeight}px`;
+    }
+  }
+
+  private getVisibleRows(): number {
+    const rowsContainer = this.container.querySelector('.xterm-rows') as HTMLElement | null;
+    if (rowsContainer) {
+      return rowsContainer.childElementCount;
+    }
+    return Math.floor(this.container.clientHeight / this.getFallbackLineHeight());
+  }
+
   private getCharWidth(font: Config['font']): number {
     if (this.cachedCharWidth !== null) return this.cachedCharWidth;
     const measured = this.measure(font);
@@ -138,14 +194,20 @@ export class SelectionOverlay {
     return this.cachedLineHeight;
   }
 
+  private getFallbackLineHeight(): number {
+    if (this.cachedLineHeight !== null) return this.cachedLineHeight;
+    return 16;
+  }
+
   private measure(font: Config['font']): { charWidth: number; lineHeight: number } {
     const row = this.container.querySelector('.xterm-rows > div') as HTMLElement | null;
     if (row) {
+      const rect = row.getBoundingClientRect();
       const text = row.textContent || '';
       const nonEmptyLength = text.length || 1;
       return {
-        charWidth: row.offsetWidth / nonEmptyLength,
-        lineHeight: row.offsetHeight,
+        charWidth: rect.width / nonEmptyLength,
+        lineHeight: rect.height,
       };
     }
 
@@ -157,8 +219,9 @@ export class SelectionOverlay {
     el.style.position = 'absolute';
     el.style.visibility = 'hidden';
     this.container.appendChild(el);
-    const charWidth = el.offsetWidth;
-    const lineHeight = el.offsetHeight;
+    const rect = el.getBoundingClientRect();
+    const charWidth = rect.width;
+    const lineHeight = rect.height;
     el.remove();
     return { charWidth, lineHeight };
   }

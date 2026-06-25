@@ -182,7 +182,7 @@ body {
   background-color: transparent !important;
 }
 
-/* Copy Mode Selection Overlay (only for multi-line visual selections) */
+/* Copy Mode Selection Overlay (multi-line visual selections and search matches) */
 .copy-mode-selection-overlay {
   position: absolute;
   top: 0;
@@ -196,6 +196,16 @@ body {
 .copy-mode-selection-span {
   background: var(--copy-mode-selection, var(--copy-mode-fg, #f8f8f2));
   opacity: 0.5;
+}
+
+.copy-mode-search-match {
+  background: var(--copy-mode-search-match, var(--copy-mode-selection, var(--copy-mode-fg, #f8f8f2)));
+  opacity: 0.35;
+}
+
+.copy-mode-search-current {
+  background: var(--copy-mode-search-current, var(--copy-mode-selection, var(--copy-mode-fg, #f8f8f2)));
+  opacity: 0.65;
 }
 
 .copy-mode-linenr-overlay {
