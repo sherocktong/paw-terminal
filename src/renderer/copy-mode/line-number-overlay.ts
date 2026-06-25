@@ -56,15 +56,28 @@ export class LineNumberOverlay {
     // baseline as the terminal text.
     const xtermFont = this.getXtermFont();
 
+    // Pre-compute the logical line for every visible screen row.
+    const logicalLines: number[] = [];
+    let logicalLine = viewportY;
     for (let i = 0; i < rows; i++) {
       const line = viewportY + i;
       const bufferLine = getLine?.(line);
       const isWrapped = bufferLine?.isWrapped ?? false;
+      if (!isWrapped) {
+        logicalLine = line;
+      }
+      logicalLines.push(logicalLine);
+    }
 
-      // In xterm.js wrapped lines are stored as multiple buffer lines; only the
-      // first (non-wrapped) one gets a line number, matching vim behavior.
-      if (isWrapped) continue;
+    for (let i = 0; i < rows; i++) {
+      // Only render the line number on the first screen row of each logical
+      // line. If the previous visible row belongs to the same logical line,
+      // this row is a wrapped continuation and should not get its own number.
+      if (i > 0 && logicalLines[i] === logicalLines[i - 1]) {
+        continue;
+      }
 
+      const line = logicalLines[i];
       const isCurrent = line === cursorLine;
       const relNum = isCurrent ? line + 1 : Math.abs(line - cursorLine);
       const text = String(relNum).padStart(3, ' ');
@@ -87,8 +100,9 @@ export class LineNumberOverlay {
       el.style.left = '0';
       el.style.right = '0';
 
-      // Position each number at the exact bounding rect of the matching xterm
-      // row. This avoids any drift from rounding or sub-pixel rendering.
+      // Position each number at the exact bounding rect of the physical screen
+      // row where this logical line starts (`i`). Because we iterate over
+      // physical screen rows, `i` maps 1:1 to the xterm row index.
       const row = this.container.querySelector(`.xterm-rows > div:nth-child(${i + 1})`) as HTMLElement | null;
       if (row) {
         const rowRect = row.getBoundingClientRect();
