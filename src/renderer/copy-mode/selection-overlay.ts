@@ -45,6 +45,7 @@ export class SelectionOverlay {
 
     const overlayTop = this.getOverlayTop();
     this.overlay.style.top = `${overlayTop}px`;
+    this.overlay.style.left = `${this.getOverlayLeft()}px`;
 
     const lineHeight = this.getLineHeight(font);
     const charWidth = this.getCharWidth(font);
@@ -102,6 +103,7 @@ export class SelectionOverlay {
 
     const overlayTop = this.getOverlayTop();
     this.overlay.style.top = `${overlayTop}px`;
+    this.overlay.style.left = `${this.getOverlayLeft()}px`;
 
     const lineHeight = this.getLineHeight(font);
     const charWidth = this.getCharWidth(font);
@@ -147,6 +149,15 @@ export class SelectionOverlay {
     const rowsContainer = this.container.querySelector('.xterm-rows') as HTMLElement | null;
     if (rowsContainer) {
       return rowsContainer.getBoundingClientRect().top - containerRect.top;
+    }
+    return 0;
+  }
+
+  private getOverlayLeft(): number {
+    const containerRect = this.container.getBoundingClientRect();
+    const rowsContainer = this.container.querySelector('.xterm-rows') as HTMLElement | null;
+    if (rowsContainer) {
+      return rowsContainer.getBoundingClientRect().left - containerRect.left;
     }
     return 0;
   }
@@ -200,6 +211,14 @@ export class SelectionOverlay {
   }
 
   private measure(font: Config['font']): { charWidth: number; lineHeight: number } {
+    // xterm.js renders each cell in its own span; measuring a single cell gives
+    // the exact character width regardless of row width or viewport size.
+    const cell = this.container.querySelector('.xterm-rows > div > span') as HTMLElement | null;
+    if (cell) {
+      const rect = cell.getBoundingClientRect();
+      return { charWidth: rect.width, lineHeight: rect.height };
+    }
+
     const row = this.container.querySelector('.xterm-rows > div') as HTMLElement | null;
     if (row) {
       const rect = row.getBoundingClientRect();
