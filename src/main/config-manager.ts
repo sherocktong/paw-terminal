@@ -8,6 +8,19 @@ function getConfigDir(): string {
   return path.join(app.getPath('home'), '.config', CONFIG_DIR_NAME);
 }
 
+function getDefaultShell(): string {
+  const envShell = process.env.SHELL;
+  if (envShell && fs.existsSync(envShell)) {
+    return envShell;
+  }
+  for (const candidate of ['/bin/zsh', '/bin/bash', '/bin/sh']) {
+    if (fs.existsSync(candidate)) {
+      return candidate;
+    }
+  }
+  return '/bin/sh';
+}
+
 function getConfigPath(): string {
   return path.join(getConfigDir(), CONFIG_FILE_NAME);
 }
@@ -170,7 +183,7 @@ function mergeWithDefaults(partial: Partial<Config>): Config {
       y: migrated.window?.y,
       maximized: migrated.window?.maximized,
     },
-    shell: migrated.shell,
+    shell: migrated.shell ?? getDefaultShell(),
     shellArgs: migrated.shellArgs ?? DEFAULT_CONFIG.shellArgs,
     customThemes: migrated.customThemes ?? DEFAULT_CONFIG.customThemes,
   };
