@@ -134,6 +134,11 @@ export class CopyMode {
         // Let default behavior handle backspace in input
         return true;
       }
+      if (e.key === 'u' && e.ctrlKey) {
+        e.preventDefault();
+        this.statusBar?.clearSearchInput();
+        return true;
+      }
       // Let other keys pass through to the search input
       return true;
     }

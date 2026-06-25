@@ -63,6 +63,10 @@ export class StatusBar {
     return this.searchInput?.value ?? '';
   }
 
+  clearSearchInput(): void {
+    if (this.searchInput) this.searchInput.value = '';
+  }
+
   focusSearchInput(): void {
     this.searchInput?.focus();
   }
