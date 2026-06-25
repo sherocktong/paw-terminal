@@ -31,6 +31,7 @@ npm run dev
 ```
 
 This starts the Vite dev server and launches Electron with HMR support.
+Dev mode uses a separate config file at `~/.config/paw/config-dev.json` so it does not overwrite your production settings.
 
 ### Build
 

@@ -14,11 +14,11 @@
     "build:preload": "vite build --config vite.preload.config.ts",
     "build:renderer": "vite build --config vite.renderer.config.ts",
     "preview": "npm run build && electron .",
-    "dist": "npm run build && electron-builder --publish=never",
-    "dist:mac": "npm run build && electron-builder --mac --publish=never",
-    "dist:win": "npm run build && electron-builder --win --publish=never",
-    "dist:linux": "npm run build && electron-builder --linux --publish=never",
-    "dist:all": "npm run build && electron-builder --mac --win --linux --publish=never",
+    "dist": "node scripts/check-native-modules.mjs && npm run build && electron-builder --publish=never",
+    "dist:mac": "node scripts/check-native-modules.mjs && npm run build && electron-builder --mac --publish=never",
+    "dist:win": "node scripts/check-native-modules.mjs && npm run build && electron-builder --win --publish=never",
+    "dist:linux": "node scripts/check-native-modules.mjs && npm run build && electron-builder --linux --publish=never",
+    "dist:all": "node scripts/check-native-modules.mjs && npm run build && electron-builder --mac --win --linux --publish=never",
     "postinstall": "electron-builder install-app-deps"
   },
   "devDependencies": {

@@ -4,8 +4,16 @@ import path from 'path';
 import { CONFIG_DIR_NAME, CONFIG_FILE_NAME, DEFAULT_CONFIG, BUILTIN_THEMES } from '../shared/constants';
 import type { Config } from '../shared/types';
 
+function isDev(): boolean {
+  return !app.isPackaged;
+}
+
 function getConfigDir(): string {
   return path.join(app.getPath('home'), '.config', CONFIG_DIR_NAME);
+}
+
+function getConfigFileName(): string {
+  return isDev() ? 'config-dev.json' : CONFIG_FILE_NAME;
 }
 
 function getDefaultShell(): string {
@@ -22,7 +30,7 @@ function getDefaultShell(): string {
 }
 
 function getConfigPath(): string {
-  return path.join(getConfigDir(), CONFIG_FILE_NAME);
+  return path.join(getConfigDir(), getConfigFileName());
 }
 
 function ensureConfigDir(): void {
