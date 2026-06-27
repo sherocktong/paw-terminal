@@ -68,7 +68,10 @@ export class CopyMode {
 
     const bufferLines = captureBuffer(this.term);
     const viewportY = this.term.buffer.active.viewportY;
-    const cursorLine = bufferLines.length > 0 ? Math.min(viewportY, bufferLines.length - 1) : 0;
+    const rows = this.term.rows;
+    const cursorLine = bufferLines.length > 0
+      ? Math.min(viewportY + rows - 1, bufferLines.length - 1)
+      : 0;
 
     this.state = {
       active: true,
