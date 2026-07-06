@@ -188,7 +188,7 @@ body {
   top: 0;
   left: 4ch;
   right: 0;
-  bottom: 24px;
+  bottom: 0;
   pointer-events: none;
   z-index: 99;
 }
@@ -196,6 +196,18 @@ body {
 .copy-mode-selection-span {
   background: var(--copy-mode-selection, var(--copy-mode-fg, #f8f8f2));
   opacity: 0.5;
+}
+
+.copy-mode-cursor {
+  background: transparent;
+  outline: 1px solid var(--copy-mode-cursor, var(--copy-mode-fg, #f8f8f2));
+  outline-offset: -1px;
+  box-shadow: inset 0 0 0 1px var(--copy-mode-bg, #282a36);
+}
+
+
+.copy-mode-active .xterm .xterm-selection div {
+  opacity: 0.75;
 }
 
 .copy-mode-search-match {
@@ -212,7 +224,7 @@ body {
   position: absolute;
   top: 0;
   left: 0;
-  bottom: 24px;
+  bottom: 0;
   width: 4ch;
   padding: 4px 2px 4px 4px;
   pointer-events: none;
@@ -240,7 +252,7 @@ body {
   margin-left: 4ch !important;
 }
 
-.copy-mode-status-bar {
+.copy-mode-search-box {
   position: absolute;
   bottom: 0;
   left: 0;
@@ -249,32 +261,27 @@ body {
   background: var(--copy-mode-status-bg, #44475a);
   color: var(--copy-mode-status-fg, #f8f8f2);
   font-size: 12px;
-  display: flex;
+  display: none;
   align-items: center;
   padding: 0 8px;
   z-index: 101;
   gap: 8px;
 }
 
-.copy-mode-status-text {
-  flex-shrink: 0;
+.copy-mode-search-box.active {
+  display: flex;
 }
 
 .copy-mode-search-input {
   flex: 1;
   height: 24px;
   background: transparent;
-  color: var(--copy-mode-status-fg, #f8f8f2);
+  color: inherit;
   border: none;
   outline: none;
   padding: 0;
   font-family: inherit;
   font-size: 12px;
-  display: none;
-}
-
-.copy-mode-search-input.active {
-  display: block;
 }
 
 /* Shortcuts Panel */

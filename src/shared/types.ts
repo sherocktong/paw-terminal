@@ -80,6 +80,10 @@ export interface CopyModePosition {
   length?: number;
 }
 
+export interface CopyModeSearchMatch extends CopyModePosition {
+  length: number;
+}
+
 export type CopyModeSubMode = 'normal' | 'visual' | 'visualLine';
 
 export interface CopyModeState {
@@ -89,7 +93,7 @@ export interface CopyModeState {
   anchor?: CopyModePosition;
   searchQuery: string;
   searchDirection: 'forward' | 'backward';
-  searchResults: CopyModePosition[];
+  searchResults: CopyModeSearchMatch[];
   currentSearchIndex: number;
   bufferLines: string[];
 }

@@ -153,7 +153,7 @@ export class KeyHandler {
 
     // Visual mode
     if (key === 'v' && !shift && !ctrl) {
-      return { command: 'enterVisual' };
+      return { command: 'toggleVisual' };
     }
     if (key === 'V' && shift) {
       return { command: 'enterVisualLine' };
@@ -180,8 +180,11 @@ export class KeyHandler {
       return { command: 'prevSearch', count };
     }
 
-    // Exit
-    if (key === 'Escape' || key === 'q' || (key === 'c' && ctrl)) {
+    // Exit / cancel
+    if (key === 'Escape') {
+      return { command: 'cancel' };
+    }
+    if (key === 'q' || (key === 'c' && ctrl)) {
       return { command: 'exit' };
     }
 

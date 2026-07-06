@@ -1,8 +1,6 @@
-import type { CopyModePosition } from '../../shared/types';
+import type { CopyModePosition, CopyModeSearchMatch } from '../../shared/types';
 
-export interface SearchMatch extends CopyModePosition {
-  length: number;
-}
+export type SearchMatch = CopyModeSearchMatch;
 
 export interface SearchResult {
   positions: SearchMatch[];

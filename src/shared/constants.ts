@@ -236,9 +236,9 @@ export const COPY_MODE_COMMANDS = [
   'moveLineStart', 'moveLineStartNonBlank', 'moveLineEnd',
   'moveFirstLine', 'moveLastLine', 'moveScreenTop', 'moveScreenMiddle', 'moveScreenBottom',
   'scrollHalfPageDown', 'scrollHalfPageUp', 'scrollPageDown', 'scrollPageUp',
-  'enterVisual', 'enterVisualLine', 'yank', 'yankLine', 'yankTextObject',
+  'toggleVisual', 'enterVisualLine', 'yank', 'yankLine', 'yankTextObject',
   'searchForward', 'searchBackward',
-  'nextSearch', 'prevSearch', 'exit', 'noop',
+  'nextSearch', 'prevSearch', 'exit', 'cancel', 'noop',
 ] as const;
 
 export type CopyModeCommand = typeof COPY_MODE_COMMANDS[number];

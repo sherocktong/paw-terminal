@@ -3,7 +3,7 @@ import type { Config, CopyModeState, CopyModePosition, CopyModeSubMode } from '.
 import { captureBuffer } from './buffer-capture';
 import { KeyHandler, type ParsedCommand } from './key-handler';
 import { searchBuffer } from './search';
-import { StatusBar } from './status-bar';
+import { SearchInput } from './search-input';
 import { SelectionOverlay } from './selection-overlay';
 import { LineNumberOverlay } from './line-number-overlay';
 import type { ThemeManager } from '../theme/theme-manager';
@@ -14,7 +14,7 @@ export class CopyMode {
   private config: Config;
   private themeManager: ThemeManager;
   private state: CopyModeState;
-  private statusBar: StatusBar | null = null;
+  private searchInput: SearchInput | null = null;
   private selectionOverlay: SelectionOverlay;
   private lineNumberOverlay: LineNumberOverlay;
   private keyHandlerInstance = new KeyHandler();
@@ -22,8 +22,6 @@ export class CopyMode {
   private lastSearchDirection: 'forward' | 'backward' = 'forward';
   private isSearching = false;
   private lastSearchQuery = '';
-  private originalSelectionBg: string | undefined;
-  private originalSelectionFg: string | undefined;
 
   constructor(term: Terminal, container: HTMLElement, config: Config, themeManager: ThemeManager) {
     this.term = term;
@@ -38,8 +36,8 @@ export class CopyMode {
   updateConfig(config: Config): void {
     this.config = config;
     if (this.state.active) {
-      this.statusBar?.setTheme(this.themeManager.getCurrentTheme());
-      this.statusBar?.setFont(config.font);
+      this.searchInput?.setTheme(this.themeManager.getCurrentTheme());
+      this.searchInput?.setFont(config.font);
       this.lineNumberOverlay.setTheme(this.themeManager.getCurrentTheme());
       this.lineNumberOverlay.setFont(config.font);
       this.updateSelection();
@@ -86,12 +84,10 @@ export class CopyMode {
 
     this.term.blur();
     this.container.classList.add('copy-mode-active');
-    this.applyCursorTheme();
-    this.statusBar = new StatusBar(this.container, this.themeManager.getCurrentTheme(), this.config.font);
+    this.searchInput = new SearchInput(this.container, this.themeManager.getCurrentTheme(), this.config.font);
     this.ensureCursorInView();
     this.updateLineNumbers();
     this.updateSelection();
-    this.statusBar.update(this.state);
   }
 
   exit(): void {
@@ -99,11 +95,10 @@ export class CopyMode {
 
     this.state = this.createInitialState();
     this.term.clearSelection();
-    this.restoreNormalTheme();
     this.selectionOverlay.clear();
     this.lineNumberOverlay.clear();
-    this.statusBar?.destroy();
-    this.statusBar = null;
+    this.searchInput?.destroy();
+    this.searchInput = null;
     this.container.classList.remove('copy-mode-active');
     this.term.focus();
 
@@ -139,7 +134,7 @@ export class CopyMode {
       }
       if (e.key === 'u' && e.ctrlKey) {
         e.preventDefault();
-        this.statusBar?.clearSearchInput();
+        this.searchInput?.clear();
         return true;
       }
       // Let other keys pass through to the search input
@@ -161,7 +156,6 @@ export class CopyMode {
     if (parsed.command === 'noop') {
       this.updateSelection();
       this.updateLineNumbers();
-      this.statusBar?.update(this.state);
       return true;
     }
 
@@ -255,11 +249,23 @@ export class CopyMode {
       case 'scrollPageUp':
         this.scrollBy(-this.term.rows * count);
         break;
-      case 'enterVisual':
-        this.enterSubMode('visual');
+      case 'toggleVisual':
+        if (this.state.subMode !== 'normal') {
+          this.leaveSubMode();
+        } else {
+          this.enterSubMode('visual');
+        }
         break;
       case 'enterVisualLine':
         this.enterSubMode('visualLine');
+        break;
+      case 'cancel':
+        if (this.state.subMode !== 'normal') {
+          this.leaveSubMode();
+        } else {
+          this.exit();
+          return;
+        }
         break;
       case 'yank':
         this.yankSelection();
@@ -295,7 +301,6 @@ export class CopyMode {
     this.ensureCursorInView();
     this.updateSelection();
     this.updateLineNumbers();
-    this.statusBar?.update(this.state);
   }
 
   private moveCursor(dLine: number, dCol: number): void {
@@ -350,33 +355,41 @@ export class CopyMode {
         const start = Math.min(this.state.anchor.line, this.state.cursor.line);
         const end = Math.max(this.state.anchor.line, this.state.cursor.line);
         this.term.selectLines(start, end);
-        return;
-      }
-
-      // visual (char-wise)
-      const anchor = this.state.anchor;
-      const startLine = Math.min(anchor.line, this.state.cursor.line);
-      const endLine = Math.max(anchor.line, this.state.cursor.line);
-      const startCol = Math.min(anchor.col, this.state.cursor.col);
-      const endCol = Math.max(anchor.col, this.state.cursor.col);
-
-      if (startLine === endLine) {
-        const lineText = this.state.bufferLines[startLine] || '';
-        const length = Math.min(endCol - startCol + 1, lineText.length - startCol);
-        if (length > 0) {
-          this.term.select(startCol, startLine, length);
-        }
       } else {
-        // xterm.js cannot represent multi-line partial selections; use overlay
-        this.selectionOverlay.showSelection(
-          anchor,
-          this.state.cursor,
-          'visual',
-          this.config.font,
-          this.term.buffer.active.viewportY,
-          (line) => this.state.bufferLines[line]?.length ?? 0
-        );
+        // visual (char-wise)
+        const anchor = this.state.anchor;
+        const startLine = Math.min(anchor.line, this.state.cursor.line);
+        const endLine = Math.max(anchor.line, this.state.cursor.line);
+        const startCol = Math.min(anchor.col, this.state.cursor.col);
+        const endCol = Math.max(anchor.col, this.state.cursor.col);
+
+        if (startLine === endLine) {
+          const lineText = this.state.bufferLines[startLine] || '';
+          const length = Math.min(endCol - startCol + 1, lineText.length - startCol);
+          if (length > 0) {
+            this.term.select(startCol, startLine, length);
+          }
+        } else {
+          // xterm.js cannot represent multi-line partial selections; use overlay
+          this.selectionOverlay.showSelection(
+            anchor,
+            this.state.cursor,
+            'visual',
+            this.config.font,
+            this.term.buffer.active.viewportY,
+            (line) => this.state.bufferLines[line]?.length ?? 0
+          );
+        }
       }
+
+      // Keep the cursor visible on top of the visual selection using a distinct color.
+      const cursorLineText = this.state.bufferLines[this.state.cursor.line] || '';
+      this.selectionOverlay.showCursor(
+        { line: this.state.cursor.line, col: Math.min(this.state.cursor.col, cursorLineText.length) },
+        this.config.font,
+        this.term.buffer.active.viewportY,
+        'visual'
+      );
       return;
     }
 
@@ -390,11 +403,15 @@ export class CopyMode {
         this.config.font,
         this.themeManager.getCurrentTheme()
       );
-      // Place the cursor at the start of the current match.
+      // Draw the cursor at the start of the current match using the cursor color.
       if (currentMatch) {
         const lineText = this.state.bufferLines[currentMatch.line] || '';
         if (lineText.length > 0) {
-          this.term.select(currentMatch.col, currentMatch.line, 1);
+          this.selectionOverlay.showCursor(
+            { line: currentMatch.line, col: currentMatch.col },
+            this.config.font,
+            this.term.buffer.active.viewportY
+          );
         }
       }
       return;
@@ -406,7 +423,11 @@ export class CopyMode {
     const lineText = this.state.bufferLines[line] || '';
     const safeCol = Math.min(col, Math.max(0, lineText.length - 1));
     if (lineText.length > 0) {
-      this.term.select(safeCol, line, 1);
+      this.selectionOverlay.showCursor(
+        { line, col: safeCol },
+        this.config.font,
+        this.term.buffer.active.viewportY
+      );
     }
   }
 
@@ -651,6 +672,11 @@ export class CopyMode {
     this.state.anchor = { ...this.state.cursor };
   }
 
+  private leaveSubMode(): void {
+    this.state.subMode = 'normal';
+    this.state.anchor = undefined;
+  }
+
   private yankSelection(): void {
     if (!this.state.anchor || this.state.subMode === 'normal') {
       // Yank current line
@@ -806,23 +832,22 @@ export class CopyMode {
   private startSearch(direction: 'forward' | 'backward'): void {
     this.isSearching = true;
     this.searchDirection = direction;
-    this.statusBar?.showSearchInput(this.lastSearchQuery, direction);
+    this.searchInput?.show(this.lastSearchQuery, direction);
   }
 
   private cancelSearch(): void {
     this.isSearching = false;
-    this.statusBar?.hideSearchInput();
+    this.searchInput?.hide();
     // Clear only the active search state; keep lastSearchQuery/lastSearchDirection
     // so n/N can still repeat the previous search.
     this.state.searchQuery = '';
     this.state.searchResults = [];
     this.state.currentSearchIndex = -1;
     this.updateSelection();
-    this.statusBar?.update(this.state);
   }
 
   private executeSearch(): void {
-    const input = this.statusBar?.hideSearchInput() ?? '';
+    const input = this.searchInput?.hide() ?? '';
     this.isSearching = false;
 
     let query = input;
@@ -830,7 +855,6 @@ export class CopyMode {
       // Empty query repeats the previous search in the direction of / or ?.
       if (!this.lastSearchQuery) {
         this.updateSelection();
-        this.statusBar?.update(this.state);
         return;
       }
       query = this.lastSearchQuery;
@@ -863,7 +887,6 @@ export class CopyMode {
 
     this.updateSelection();
     this.updateLineNumbers();
-    this.statusBar?.update(this.state);
   }
 
   private nextSearch(count: number): void {
@@ -906,7 +929,6 @@ export class CopyMode {
     this.ensureCursorInView();
     this.updateSelection();
     this.updateLineNumbers();
-    this.statusBar?.update(this.state);
   }
 
   private updateLineNumbers(): void {
@@ -920,22 +942,5 @@ export class CopyMode {
       this.state.cursor.line,
       (index) => this.term.buffer.active.getLine(index) ?? undefined
     );
-  }
-
-  private applyCursorTheme(): void {
-    const theme = this.term.options.theme || {};
-    this.originalSelectionBg = theme.selectionBackground;
-    this.originalSelectionFg = theme.selectionForeground;
-    const currentTheme = this.themeManager.getCurrentTheme().colors;
-    this.term.options.theme = {
-      ...theme,
-      selectionBackground: currentTheme.foreground,
-      selectionForeground: currentTheme.background,
-    };
-  }
-
-  private restoreNormalTheme(): void {
-    const theme = this.term.options.theme || {};
-    this.term.options.theme = { ...theme, selectionBackground: this.originalSelectionBg, selectionForeground: this.originalSelectionFg };
   }
 }

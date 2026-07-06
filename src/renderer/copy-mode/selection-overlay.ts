@@ -126,6 +126,35 @@ export class SelectionOverlay {
     }
   }
 
+  /**
+   * Render a one-cell cursor at the given position. The caller should clear the
+   * overlay first when the cursor needs to move.
+   */
+  showCursor(
+    cursor: CopyModePosition,
+    font: Config['font'],
+    viewportY: number,
+    variant: 'normal' | 'visual' = 'normal'
+  ): void {
+    this.ensureOverlay();
+    if (!this.overlay) return;
+
+    const overlayTop = this.getOverlayTop();
+    this.overlay.style.top = `${overlayTop}px`;
+    this.overlay.style.left = `${this.getOverlayLeft()}px`;
+
+    const lineHeight = this.getLineHeight(font);
+    const charWidth = this.getCharWidth(font);
+
+    const span = document.createElement('span');
+    span.className = variant === 'visual' ? 'copy-mode-cursor copy-mode-cursor-visual' : 'copy-mode-cursor';
+    span.style.position = 'absolute';
+    span.style.left = `${cursor.col * charWidth}px`;
+    span.style.width = `${charWidth}px`;
+    this.positionSpanAtRow(span, cursor.line, viewportY, overlayTop, lineHeight);
+    this.overlay.appendChild(span);
+  }
+
   clear(): void {
     if (this.overlay) {
       this.overlay.remove();
@@ -211,25 +240,44 @@ export class SelectionOverlay {
   }
 
   private measure(font: Config['font']): { charWidth: number; lineHeight: number } {
-    // xterm.js renders each cell in its own span; measuring a single cell gives
-    // the exact character width regardless of row width or viewport size.
-    const cell = this.container.querySelector('.xterm-rows > div > span') as HTMLElement | null;
-    if (cell) {
-      const rect = cell.getBoundingClientRect();
-      return { charWidth: rect.width, lineHeight: rect.height };
+    // xterm.js groups consecutive characters with the same style into spans, so
+    // the first span may cover many cells. Find the narrowest span that contains
+    // at least one character to get a reliable single-cell width.
+    const rowsContainer = this.container.querySelector('.xterm-rows') as HTMLElement | null;
+    if (rowsContainer) {
+      const spans = rowsContainer.querySelectorAll(':scope > div > span');
+      let minCharWidth = Infinity;
+      let lineHeight = 0;
+      for (const span of Array.from(spans)) {
+        const el = span as HTMLElement;
+        const text = el.textContent || '';
+        if (text.length === 0) continue;
+        const rect = el.getBoundingClientRect();
+        if (rect.width === 0 || rect.height === 0) continue;
+        lineHeight = Math.max(lineHeight, rect.height);
+        const charWidth = rect.width / text.length;
+        if (charWidth < minCharWidth) {
+          minCharWidth = charWidth;
+        }
+      }
+      if (minCharWidth !== Infinity && minCharWidth > 0) {
+        return { charWidth: minCharWidth, lineHeight: lineHeight || minCharWidth * 1.2 };
+      }
+
+      // No spans found; fall back to row width divided by character count.
+      const row = rowsContainer.querySelector(':scope > div') as HTMLElement | null;
+      if (row) {
+        const rect = row.getBoundingClientRect();
+        const text = row.textContent || '';
+        const nonEmptyLength = text.length || 1;
+        return {
+          charWidth: rect.width / nonEmptyLength,
+          lineHeight: rect.height,
+        };
+      }
     }
 
-    const row = this.container.querySelector('.xterm-rows > div') as HTMLElement | null;
-    if (row) {
-      const rect = row.getBoundingClientRect();
-      const text = row.textContent || '';
-      const nonEmptyLength = text.length || 1;
-      return {
-        charWidth: rect.width / nonEmptyLength,
-        lineHeight: rect.height,
-      };
-    }
-
+    // Last resort: measure a hidden single character using the configured font.
     const el = document.createElement('span');
     el.textContent = 'M';
     el.style.fontFamily = font.family || 'monospace';
