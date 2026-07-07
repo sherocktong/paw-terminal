@@ -126,35 +126,6 @@ export class SelectionOverlay {
     }
   }
 
-  /**
-   * Render a one-cell cursor at the given position. The caller should clear the
-   * overlay first when the cursor needs to move.
-   */
-  showCursor(
-    cursor: CopyModePosition,
-    font: Config['font'],
-    viewportY: number,
-    variant: 'normal' | 'visual' = 'normal'
-  ): void {
-    this.ensureOverlay();
-    if (!this.overlay) return;
-
-    const overlayTop = this.getOverlayTop();
-    this.overlay.style.top = `${overlayTop}px`;
-    this.overlay.style.left = `${this.getOverlayLeft()}px`;
-
-    const lineHeight = this.getLineHeight(font);
-    const charWidth = this.getCharWidth(font);
-
-    const span = document.createElement('span');
-    span.className = variant === 'visual' ? 'copy-mode-cursor copy-mode-cursor-visual' : 'copy-mode-cursor';
-    span.style.position = 'absolute';
-    span.style.left = `${cursor.col * charWidth}px`;
-    span.style.width = `${charWidth}px`;
-    this.positionSpanAtRow(span, cursor.line, viewportY, overlayTop, lineHeight);
-    this.overlay.appendChild(span);
-  }
-
   clear(): void {
     if (this.overlay) {
       this.overlay.remove();
