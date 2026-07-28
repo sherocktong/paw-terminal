@@ -47,6 +47,7 @@ export const DEFAULT_CONFIG: Config = {
     height: 600,
   },
   shellArgs: [],
+  interactiveConsoleNames: [],
   customThemes: [],
 };
 

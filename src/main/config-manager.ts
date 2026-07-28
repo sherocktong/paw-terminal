@@ -193,6 +193,8 @@ function mergeWithDefaults(partial: Partial<Config>): Config {
     },
     shell: migrated.shell ?? getDefaultShell(),
     shellArgs: migrated.shellArgs ?? DEFAULT_CONFIG.shellArgs,
+    interactiveConsoleNames:
+      migrated.interactiveConsoleNames ?? DEFAULT_CONFIG.interactiveConsoleNames,
     customThemes: migrated.customThemes ?? DEFAULT_CONFIG.customThemes,
   };
 }

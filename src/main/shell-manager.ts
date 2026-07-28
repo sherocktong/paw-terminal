@@ -56,7 +56,7 @@ function getUserEnv(): Record<string, string> | undefined {
 // Common interactive terminal/console applications that should not trigger
 // the running-script spinner.
 const INTERACTIVE_CONSOLE_NAMES = new Set([
-  'claude',
+  'claude', 'opencode', 'codex', 'pi', 'copilot',
   'vim', 'nvim', 'vi', 'view',
   'emacs', 'nano', 'pico', 'micro',
   'htop', 'top', 'btop', 'gotop', 'ytop', 'atop',
@@ -129,15 +129,112 @@ async function getProcessNames(pids: number[]): Promise<string[]> {
   return [];
 }
 
-export async function hasRunningScript(pid: number): Promise<boolean> {
+async function getForegroundPgrp(pid: number): Promise<number | undefined> {
+  const platform = os.platform();
+  if (platform !== 'darwin' && platform !== 'linux') return undefined;
+  try {
+    const { stdout } = await execAsync(`ps -o tpgid= -p ${pid}`, {
+      encoding: 'utf-8',
+      timeout: 1000,
+    });
+    const pgrp = parseInt(stdout.trim(), 10);
+    return isNaN(pgrp) ? undefined : pgrp;
+  } catch {
+    // Ignore errors (process may have exited)
+  }
+  return undefined;
+}
+
+async function getProcessGroups(pids: number[]): Promise<Map<number, number>> {
+  const result = new Map<number, number>();
+  if (pids.length === 0) return result;
+  try {
+    const { stdout } = await execAsync(
+      `ps -o pid=,pgid= -p ${pids.join(',')}`,
+      { encoding: 'utf-8', timeout: 1000 }
+    );
+    for (const line of stdout.trim().split('\n')) {
+      const parts = line.trim().split(/\s+/);
+      if (parts.length >= 2) {
+        result.set(parseInt(parts[0], 10), parseInt(parts[1], 10));
+      }
+    }
+  } catch {
+    // Ignore errors (process may have exited)
+  }
+  return result;
+}
+
+async function getShellTty(pid: number): Promise<string | undefined> {
+  const platform = os.platform();
+  if (platform !== 'darwin' && platform !== 'linux') return undefined;
+  try {
+    const { stdout } = await execAsync(`ps -o tty= -p ${pid}`, {
+      encoding: 'utf-8',
+      timeout: 1000,
+    });
+    const tty = stdout.trim();
+    if (tty && tty !== '??') {
+      return `/dev/${tty}`;
+    }
+  } catch {
+    // Ignore errors (process may have exited)
+  }
+  return undefined;
+}
+
+async function isTtyRawMode(ttyPath: string): Promise<boolean | undefined> {
+  try {
+    const { stdout } = await execAsync(`stty -f ${ttyPath}`, {
+      encoding: 'utf-8',
+      timeout: 1000,
+    });
+    // In raw/cbreak mode the lflags line contains -icanon. In canonical
+    // mode icanon appears without the leading minus.
+    return stdout.includes('-icanon');
+  } catch {
+    // Ignore errors (e.g., no permission, process exited)
+  }
+  return undefined;
+}
+
+export async function hasRunningScript(pid: number, extraInteractiveNames?: string[]): Promise<boolean> {
   const descendants = await collectDescendantPids(pid);
   if (descendants.length === 0) return false;
 
   const names = await getProcessNames(descendants);
+  const denyList = new Set(INTERACTIVE_CONSOLE_NAMES);
+  for (const name of extraInteractiveNames ?? []) {
+    denyList.add(name.trim().toLowerCase());
+  }
   // If any descendant is an interactive console/TUI app, do not show the spinner.
-  if (names.some((name) => INTERACTIVE_CONSOLE_NAMES.has(name.toLowerCase()))) {
+  if (names.some((name) => denyList.has(name.toLowerCase()))) {
     return false;
   }
+
+  // Dynamic fallback: on Unix, if a descendant owns the foreground process
+  // group and the TTY is in raw/cbreak mode, treat it as an unknown
+  // interactive TUI. Foreground commands in canonical mode still show the
+  // spinner because job-control shells put every foreground job in its own
+  // process group.
+  const foregroundPgrp = await getForegroundPgrp(pid);
+  if (foregroundPgrp !== undefined) {
+    const shellPgrp = (await getProcessGroups([pid])).get(pid);
+    const descendantPgrps = await getProcessGroups(descendants);
+    const foregroundDescendant = descendants.find(
+      (d) => descendantPgrps.get(d) === foregroundPgrp
+    );
+    if (foregroundDescendant !== undefined && shellPgrp !== foregroundPgrp) {
+      const ttyPath = await getShellTty(pid);
+      if (ttyPath) {
+        const rawMode = await isTtyRawMode(ttyPath);
+        if (rawMode) {
+          return false;
+        }
+      }
+    }
+  }
+
   return true;
 }
 

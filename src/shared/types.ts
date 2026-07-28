@@ -69,6 +69,7 @@ export interface Config {
   window: WindowState;
   shell?: string;
   shellArgs?: string[];
+  interactiveConsoleNames?: string[];
   customThemes: Theme[];
 }
 

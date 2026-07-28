@@ -102,6 +102,20 @@ Enter copy mode with **Ctrl+Shift+C** (customizable in config).
 | `n` `N` | Next / previous search result |
 | `q` `Esc` | Exit copy mode |
 
+### Tab Spinner Deny List
+
+By default, the tab spinner is hidden for known interactive programs like `vim`, `htop`, and `tmux`. You can extend this list with additional process command names:
+
+```json
+{
+  "interactiveConsoleNames": ["watch", "my-tui"]
+}
+```
+
+Names are case-insensitive and merged with the built-in list.
+
+On macOS and Linux, the terminal also detects unknown interactive TUIs by checking whether a descendant process owns the foreground process group and has put the terminal in raw/cbreak mode.
+
 ## License
 
 MIT

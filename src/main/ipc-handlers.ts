@@ -77,7 +77,8 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
   ipcMain.handle(IPC_CHANNELS.SHELL_HAS_RUNNING_SCRIPT, async (_event, id: string): Promise<boolean> => {
     const ptyProcess = ptyMap.get(id);
     if (ptyProcess) {
-      return hasRunningScript(ptyProcess.pid);
+      const config = loadConfig();
+      return hasRunningScript(ptyProcess.pid, config.interactiveConsoleNames);
     }
     return false;
   });
