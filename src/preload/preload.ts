@@ -17,6 +17,7 @@ export interface PuppyApi {
     kill: (id: string) => void;
     getCwd: (id: string) => Promise<string | undefined>;
     hasRunningScript: (id: string) => Promise<boolean>;
+    isShellInForeground: (id: string) => Promise<boolean | undefined>;
   };
   clipboard: {
     writeText: (text: string) => void;
@@ -24,6 +25,9 @@ export interface PuppyApi {
   theme: {
     getSystem: () => Promise<AppearanceMode>;
     onSystemChange: (callback: (mode: AppearanceMode) => void) => () => void;
+  };
+  app: {
+    openExternal: (url: string) => void;
   };
   window: {
     saveState: (state: WindowState) => void;
@@ -80,6 +84,7 @@ const api: PuppyApi = {
     },
     getCwd: (id: string) => ipcRenderer.invoke(IPC_CHANNELS.SHELL_CWD, id),
     hasRunningScript: (id: string) => ipcRenderer.invoke(IPC_CHANNELS.SHELL_HAS_RUNNING_SCRIPT, id),
+    isShellInForeground: (id: string) => ipcRenderer.invoke(IPC_CHANNELS.SHELL_IS_SHELL_FOREGROUND, id),
   },
   clipboard: {
     writeText: (text: string) => ipcRenderer.send(IPC_CHANNELS.CLIPBOARD_WRITE, text),
@@ -93,6 +98,9 @@ const api: PuppyApi = {
         ipcRenderer.removeListener(IPC_CHANNELS.THEME_SYSTEM_CHANGED, handler);
       };
     },
+  },
+  app: {
+    openExternal: (url: string) => ipcRenderer.send(IPC_CHANNELS.APP_OPEN_EXTERNAL, url),
   },
   window: {
     saveState: (state: WindowState) => ipcRenderer.send(IPC_CHANNELS.WINDOW_STATE, state),

@@ -238,6 +238,21 @@ export async function hasRunningScript(pid: number, extraInteractiveNames?: stri
   return true;
 }
 
+export async function isShellInForeground(pid: number): Promise<boolean | undefined> {
+  const platform = os.platform();
+  if (platform !== 'darwin' && platform !== 'linux') return undefined;
+  try {
+    const foregroundPgrp = await getForegroundPgrp(pid);
+    if (foregroundPgrp === undefined) return undefined;
+    const shellPgrp = (await getProcessGroups([pid])).get(pid);
+    if (shellPgrp === undefined) return undefined;
+    return foregroundPgrp === shellPgrp;
+  } catch {
+    // Ignore errors (process may have exited)
+  }
+  return undefined;
+}
+
 export async function getShellCwd(pid: number): Promise<string | undefined> {
   try {
     const platform = os.platform();

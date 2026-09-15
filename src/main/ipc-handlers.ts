@@ -1,14 +1,21 @@
-import { ipcMain, clipboard, nativeTheme, BrowserWindow, app } from 'electron';
+import { ipcMain, clipboard, nativeTheme, BrowserWindow, app, shell } from 'electron';
 import crypto from 'crypto';
 import { IPC_CHANNELS } from '../shared/constants';
 import { loadConfig, saveConfig } from './config-manager';
-import { spawnShell, getShellCwd, hasRunningScript } from './shell-manager';
+import { spawnShell, getShellCwd, hasRunningScript, isShellInForeground } from './shell-manager';
 import type { Config } from '../shared/types';
 import type { IPty } from 'node-pty';
 
 const ptyMap = new Map<string, IPty>();
 
 export function registerIpcHandlers(mainWindow: BrowserWindow): void {
+  // Open links in the system default browser (only safe schemes)
+  ipcMain.on(IPC_CHANNELS.APP_OPEN_EXTERNAL, (_event, url: string) => {
+    if (typeof url === 'string' && /^https?:\/\//i.test(url)) {
+      shell.openExternal(url);
+    }
+  });
+
   // Config
   ipcMain.handle(IPC_CHANNELS.CONFIG_GET, (): Config => {
     return loadConfig();
@@ -81,6 +88,17 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
       return hasRunningScript(ptyProcess.pid, config.interactiveConsoleNames);
     }
     return false;
+  });
+
+  // Returns true when the shell owns the TTY foreground (no foreground
+  // child process such as a TUI app), false when a foreground app owns
+  // the terminal, or undefined when it cannot be determined.
+  ipcMain.handle(IPC_CHANNELS.SHELL_IS_SHELL_FOREGROUND, async (_event, id: string): Promise<boolean | undefined> => {
+    const ptyProcess = ptyMap.get(id);
+    if (ptyProcess) {
+      return isShellInForeground(ptyProcess.pid);
+    }
+    return undefined;
   });
 
   // Clipboard

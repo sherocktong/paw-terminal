@@ -15,6 +15,7 @@ export const IPC_CHANNELS = {
   SHELL_EXIT: 'shell:exit',
   SHELL_CWD: 'shell:cwd',
   SHELL_HAS_RUNNING_SCRIPT: 'shell:hasRunningScript',
+  SHELL_IS_SHELL_FOREGROUND: 'shell:isShellForeground',
   CLIPBOARD_WRITE: 'clipboard:write',
   THEME_GET_SYSTEM: 'theme:getSystem',
   THEME_SYSTEM_CHANGED: 'theme:systemChanged',
@@ -22,6 +23,7 @@ export const IPC_CHANNELS = {
   WINDOW_TOGGLE_MAXIMIZE: 'window:toggleMaximize',
   WINDOW_MINIMIZE: 'window:minimize',
   APP_QUIT: 'app:quit',
+  APP_OPEN_EXTERNAL: 'app:openExternal',
 } as const;
 
 export const DEFAULT_CONFIG: Config = {

@@ -15,6 +15,11 @@ interface Tab {
   osc2Title: string | null; // OSC 2 window title
   cwdName: string | null;   // CWD name from lsof/OSC 7
   hasRunningScript: boolean;
+  // True once a foreground app (TUI) has owned the TTY since the shell was
+  // last in the foreground. Used to clear OSC titles left behind by apps
+  // that set a title (e.g. pi writes OSC 0 "pi - <cwd>") and never restore
+  // it on exit.
+  foregroundAppSeen: boolean;
   term: Terminal;
   fitAddon: FitAddon;
   copyMode: CopyMode;
@@ -36,6 +41,8 @@ export class TabManager {
   private cwdPollInterval: NodeJS.Timeout | null = null;
   private shortcutsPanel: ShortcutsPanel | null = null;
   private scriptPollInterval: NodeJS.Timeout | null = null;
+  // Debounce timers for event-driven OSC title cleanup, keyed by tab id.
+  private fgTitleCheckTimeouts = new Map<string, NodeJS.Timeout>();
 
   constructor(
     terminalContainer: HTMLElement,
@@ -80,7 +87,14 @@ export class TabManager {
     const term = initializeTerminal(container, this.config);
     const fitAddon = new FitAddon();
     term.loadAddon(fitAddon);
-    term.loadAddon(new WebLinksAddon());
+    // Open clicked links in the system default browser instead of
+    // navigating the Electron window.
+    term.loadAddon(
+      new WebLinksAddon((event, uri) => {
+        event.preventDefault();
+        window.puppy.app.openExternal(uri);
+      }),
+    );
 
     const copyMode = new CopyMode(term, container, this.config, this.themeManager);
 
@@ -107,6 +121,7 @@ export class TabManager {
       osc2Title: null,
       cwdName: null,
       hasRunningScript: false,
+      foregroundAppSeen: false,
       term,
       fitAddon,
       copyMode,
@@ -120,6 +135,7 @@ export class TabManager {
     tab.onDataUnsubscribe = window.puppy.shell.onData(({ id: dataId, data }) => {
       if (dataId === id) {
         term.write(data);
+        this.scheduleForegroundTitleCheck(tab);
       }
     });
 
@@ -129,6 +145,10 @@ export class TabManager {
 
       const targetTab = this.tabs.find((t) => t.id === id);
       if (!targetTab) return;
+
+      const pendingCheck = this.fgTitleCheckTimeouts.get(id);
+      if (pendingCheck) clearTimeout(pendingCheck);
+      this.fgTitleCheckTimeouts.delete(id);
 
       // Stop keyboard input from reaching the dead PTY
       targetTab.onInputUnsubscribe();
@@ -169,6 +189,9 @@ export class TabManager {
     if (index < 0 || index >= this.tabs.length) return;
 
     const tab = this.tabs[index];
+    const pendingCheck = this.fgTitleCheckTimeouts.get(tab.id);
+    if (pendingCheck) clearTimeout(pendingCheck);
+    this.fgTitleCheckTimeouts.delete(tab.id);
     tab.onDataUnsubscribe();
     tab.onInputUnsubscribe();
     tab.onExitUnsubscribe();
@@ -270,6 +293,8 @@ export class TabManager {
       this.resizeObserver.disconnect();
     }
     for (const tab of this.tabs) {
+      const pendingCheck = this.fgTitleCheckTimeouts.get(tab.id);
+      if (pendingCheck) clearTimeout(pendingCheck);
       tab.onDataUnsubscribe();
       tab.onExitUnsubscribe();
       tab.copyMode.exit();
@@ -563,7 +588,7 @@ export class TabManager {
           this.updateTabTitleFromCwd(tab).catch(() => {})
         )
       );
-    }, 30000);
+    }, 5000);
   }
 
   private stopCwdPolling(): void {
@@ -604,6 +629,41 @@ export class TabManager {
     }
   }
 
+  // Fullscreen TUI apps often set the terminal title (OSC 0/1/2) and never
+  // restore it on exit (e.g. pi writes OSC 0 "pi - <cwd>"). The OS provides no
+  // event for foreground-process-group changes, so detect the exit
+  // event-driven instead: whenever output arrives on a tab that has a
+  // latched OSC title, debounce a check of TTY foreground ownership. Once an
+  // app has owned the foreground and the shell regains it, clear the latched
+  // titles so the cwd-based title takes over. Shells that set their own title
+  // via precmd hooks never lose foreground ownership, so their titles survive.
+  private scheduleForegroundTitleCheck(tab: Tab): void {
+    if (!tab.osc1Title && !tab.osc2Title) return;
+    const existing = this.fgTitleCheckTimeouts.get(tab.id);
+    if (existing) clearTimeout(existing);
+    this.fgTitleCheckTimeouts.set(
+      tab.id,
+      setTimeout(() => {
+        this.fgTitleCheckTimeouts.delete(tab.id);
+        this.checkForegroundTitleOwnership(tab).catch(() => {});
+      }, 500)
+    );
+  }
+
+  private async checkForegroundTitleOwnership(tab: Tab): Promise<void> {
+    const shellInForeground = await window.puppy.shell.isShellInForeground(tab.id);
+    if (shellInForeground === false) {
+      tab.foregroundAppSeen = true;
+    } else if (shellInForeground === true && tab.foregroundAppSeen) {
+      tab.foregroundAppSeen = false;
+      if (tab.osc1Title !== null || tab.osc2Title !== null) {
+        tab.osc1Title = null;
+        tab.osc2Title = null;
+        this.refreshTabTitle(tab);
+      }
+    }
+  }
+
   private registerOscTitleHandlers(term: Terminal, tab: Tab): void {
     // OSC 0: Set icon name and window title (clears icon name, sets window title)
     // OSC 1: Set icon name (used as tab title)
@@ -615,16 +675,19 @@ export class TabManager {
         tab.osc1Title = null;
         tab.osc2Title = data || null;
         this.refreshTabTitle(tab);
+        this.scheduleForegroundTitleCheck(tab);
         return true;
       });
       (term.parser as any).registerOscHandler(1, (data: string) => {
         tab.osc1Title = data || null;
         this.refreshTabTitle(tab);
+        this.scheduleForegroundTitleCheck(tab);
         return true;
       });
       (term.parser as any).registerOscHandler(2, (data: string) => {
         tab.osc2Title = data || null;
         this.refreshTabTitle(tab);
+        this.scheduleForegroundTitleCheck(tab);
         return true;
       });
     } catch {
