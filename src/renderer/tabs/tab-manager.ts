@@ -1,11 +1,19 @@
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { WebLinksAddon } from '@xterm/addon-web-links';
-import type { Config } from '../../shared/types';
+import type { Config, ServiceAccelerator } from '../../shared/types';
 import { initializeTerminal, resizeTerminal } from '../terminal/terminal';
 import { ThemeManager } from '../theme/theme-manager';
 import { CopyMode } from '../copy-mode/copy-mode';
 import { ShortcutsPanel } from '../shortcuts-panel/shortcuts-panel';
+
+// AppKit function-key names used in the pbs registry vs DOM KeyboardEvent.key.
+const KEY_NAME_ALIASES: Record<string, string> = {
+  Up: 'ArrowUp',
+  Down: 'ArrowDown',
+  Left: 'ArrowLeft',
+  Right: 'ArrowRight',
+};
 
 interface Tab {
   id: string;
@@ -41,6 +49,9 @@ export class TabManager {
   private cwdPollInterval: NodeJS.Timeout | null = null;
   private shortcutsPanel: ShortcutsPanel | null = null;
   private scriptPollInterval: NodeJS.Timeout | null = null;
+  // macOS Services shortcuts mirrored from the pbs registry (mac only;
+  // always empty elsewhere, which disables the matcher).
+  private serviceAccelerators: ServiceAccelerator[] = [];
   // Debounce timers for event-driven OSC title cleanup, keyed by tab id.
   private fgTitleCheckTimeouts = new Map<string, NodeJS.Timeout>();
 
@@ -57,6 +68,7 @@ export class TabManager {
 
     this.setupGlobalDataListener();
     this.setupKeyboardShortcuts();
+    this.setupServicesHotkeys();
     this.setupResizeObserver();
     this.startCwdPolling();
     this.startScriptPolling();
@@ -472,6 +484,64 @@ export class TabManager {
     return keyMatch && modifiersMatch && effectiveModifiers.length === [
       e.ctrlKey, e.shiftKey, e.altKey, e.metaKey,
     ].filter(Boolean).length;
+  }
+
+  // Keys paw claims itself at the renderer level (menu accelerators like
+  // Cmd+T never reach here). Services shortcuts lose to these.
+  private isPawRendererShortcut(e: KeyboardEvent): boolean {
+    if (this.shouldEnterCopyMode(e)) return true;
+    if ((e.metaKey || e.ctrlKey) && !e.altKey && e.key === '/') return true;
+    return false;
+  }
+
+  // macOS dispatches Services shortcuts above the front app, but Chromium
+  // never validates services (see main/services-bridge.ts), so the shortcuts
+  // arrive here as plain keydowns. Recognize them from the pbs registry
+  // mirror and run the service through NSPerformService instead.
+  private setupServicesHotkeys(): void {
+    window.puppy.services.onRegistry((entries) => {
+      this.serviceAccelerators = entries;
+    });
+
+    // Capture phase: runs before xterm's textarea listeners so matched keys
+    // never leak escape sequences into the PTY.
+    document.addEventListener(
+      'keydown',
+      (e) => {
+        if (this.serviceAccelerators.length === 0) return;
+        if (e.isComposing || e.repeat) return;
+        if (this.shortcutsPanel?.isVisible()) return;
+        if (this.activeIndex < 0 || this.activeIndex >= this.tabs.length) return;
+        const activeTab = this.tabs[this.activeIndex];
+        if (activeTab.copyMode.isActive()) return;
+        if (this.isPawRendererShortcut(e)) return;
+
+        const match = this.matchServiceAccelerator(e);
+        if (!match) return;
+
+        e.preventDefault();
+        e.stopPropagation();
+        window.puppy.services.perform(match.name, activeTab.term.getSelection());
+      },
+      true,
+    );
+  }
+
+  private matchServiceAccelerator(e: KeyboardEvent): ServiceAccelerator | null {
+    for (const acc of this.serviceAccelerators) {
+      if (acc.cmd !== e.metaKey || acc.opt !== e.altKey ||
+          acc.ctrl !== e.ctrlKey || acc.shift !== e.shiftKey) {
+        continue;
+      }
+      // The registry uses AppKit names; KeyboardEvent uses DOM names.
+      const expected = KEY_NAME_ALIASES[acc.key] ?? acc.key;
+      if (expected.length === 1) {
+        if (e.key.toLowerCase() === expected.toLowerCase()) return acc;
+      } else if (e.key === expected) {
+        return acc;
+      }
+    }
+    return null;
   }
 
   private setupResizeObserver(): void {

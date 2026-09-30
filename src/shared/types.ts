@@ -1,3 +1,16 @@
+// A macOS Services shortcut binding mirrored from the pbs registry
+// (NSServicesStatus). key is a KeyboardEvent.key-compatible value
+// ("F5", "s", "Escape", "Up"/"Down"/"Left"/"Right"); the renderer maps the
+// arrow aliases to ArrowUp/ArrowDown/etc. when matching.
+export interface ServiceAccelerator {
+  name: string;
+  key: string;
+  cmd: boolean;
+  opt: boolean;
+  ctrl: boolean;
+  shift: boolean;
+}
+
 export interface Theme {
   id: string;
   name: string;

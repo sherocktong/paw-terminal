@@ -15,12 +15,15 @@
     "build:renderer": "vite build --config vite.renderer.config.ts",
     "test": "tsx --test tests/copy-mode.test.ts",
     "preview": "npm run build && electron .",
-    "dist": "node scripts/check-native-modules.mjs && npm run build && electron-builder --publish=never",
-    "dist:mac": "node scripts/check-native-modules.mjs && npm run build && electron-builder --mac --publish=never",
-    "dist:win": "node scripts/check-native-modules.mjs && npm run build && electron-builder --win --publish=never",
-    "dist:linux": "node scripts/check-native-modules.mjs && npm run build && electron-builder --linux --publish=never",
-    "dist:all": "node scripts/check-native-modules.mjs && npm run build && electron-builder --mac --win --linux --publish=never",
-    "postinstall": "electron-builder install-app-deps"
+    "dist": "npm run build:helper && node scripts/check-native-modules.mjs && npm run build && electron-builder --publish=never",
+    "dist:mac": "npm run build:helper && node scripts/check-native-modules.mjs && npm run build && electron-builder --mac --publish=never",
+    "dist:win": "npm run build:helper && node scripts/check-native-modules.mjs && npm run build && electron-builder --win --publish=never",
+    "dist:linux": "npm run build:helper && node scripts/check-native-modules.mjs && npm run build && electron-builder --linux --publish=never",
+    "dist:all": "npm run build:helper && node scripts/check-native-modules.mjs && npm run build && electron-builder --mac --win --linux --publish=never",
+    "postinstall": "electron-builder install-app-deps",
+    "build:helper": "node scripts/build-service-runner.mjs",
+    "predev": "npm run build:helper",
+    "prestart": "npm run build:helper"
   },
   "devDependencies": {
     "@types/node": "^22.15.42",
@@ -65,6 +68,12 @@
             "x64",
             "arm64"
           ]
+        }
+      ],
+      "extraResources": [
+        {
+          "from": "assets/bin",
+          "to": "bin"
         }
       ]
     },

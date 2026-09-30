@@ -24,6 +24,8 @@ export const IPC_CHANNELS = {
   WINDOW_MINIMIZE: 'window:minimize',
   APP_QUIT: 'app:quit',
   APP_OPEN_EXTERNAL: 'app:openExternal',
+  SERVICES_REGISTRY: 'services:registry',
+  SERVICES_PERFORM: 'services:perform',
 } as const;
 
 export const DEFAULT_CONFIG: Config = {

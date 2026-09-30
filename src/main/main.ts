@@ -4,6 +4,7 @@ import { createWindow } from './window-manager';
 import { registerIpcHandlers } from './ipc-handlers';
 import { setApplicationMenu } from './menu-builder';
 import { loadConfig } from './config-manager';
+import { initServicesBridge } from './services-bridge';
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -38,6 +39,7 @@ app.whenReady().then(() => {
     applicationVersion: app.getVersion(),
   });
   setApplicationMenu();
+  initServicesBridge();
   createMainWindow();
 
   app.on('activate', () => {

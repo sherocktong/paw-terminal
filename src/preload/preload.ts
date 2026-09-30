@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron';
 import { IPC_CHANNELS } from '../shared/constants';
-import type { Config, AppearanceMode, WindowState } from '../shared/types';
+import type { Config, AppearanceMode, WindowState, ServiceAccelerator } from '../shared/types';
 
 export interface PuppyApi {
   config: {
@@ -28,6 +28,10 @@ export interface PuppyApi {
   };
   app: {
     openExternal: (url: string) => void;
+  };
+  services: {
+    onRegistry: (callback: (entries: ServiceAccelerator[]) => void) => () => void;
+    perform: (name: string, selection?: string) => void;
   };
   window: {
     saveState: (state: WindowState) => void;
@@ -101,6 +105,17 @@ const api: PuppyApi = {
   },
   app: {
     openExternal: (url: string) => ipcRenderer.send(IPC_CHANNELS.APP_OPEN_EXTERNAL, url),
+  },
+  services: {
+    onRegistry: (callback) => {
+      const handler = (_event: unknown, entries: ServiceAccelerator[]) => callback(entries);
+      ipcRenderer.on(IPC_CHANNELS.SERVICES_REGISTRY, handler);
+      return () => {
+        ipcRenderer.removeListener(IPC_CHANNELS.SERVICES_REGISTRY, handler);
+      };
+    },
+    perform: (name: string, selection?: string) =>
+      ipcRenderer.send(IPC_CHANNELS.SERVICES_PERFORM, name, selection),
   },
   window: {
     saveState: (state: WindowState) => ipcRenderer.send(IPC_CHANNELS.WINDOW_STATE, state),

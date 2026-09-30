@@ -145,5 +145,8 @@ vite.config.ts.timestamp-*
 # electron-builder output
 release/
 
+# Compiled Swift helper (rebuild with: npm run build:helper)
+assets/bin/
+
 # macOS
 .DS_Store
