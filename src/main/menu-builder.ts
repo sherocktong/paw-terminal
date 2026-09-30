@@ -8,6 +8,11 @@ export function buildMenu(): Menu {
       submenu: [
         { role: 'about' },
         { type: 'separator' },
+        // Native AppKit Services menu: AppKit populates it from the pbs
+        // registry and validates items against the responder chain, same as
+        // any macOS app (menu clicks dispatch through macOS itself).
+        { role: 'services' },
+        { type: 'separator' },
         { role: 'hide' },
         { role: 'hideOthers' },
         { role: 'unhide' },

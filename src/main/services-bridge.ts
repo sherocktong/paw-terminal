@@ -60,6 +60,9 @@ function decodeKeyEquivalent(equivalent: string): Omit<ServiceAccelerator, 'name
   if (!token) return null;
 
   let key: string | null = null;
+  // plutil -convert json turns function-key characters into \uXXXX escapes,
+  // so by the time we see the string it may contain the literal U+F700-range
+  // character instead of AppKit's textual "\Uxxxx" escape. Accept both forms.
   const unicodeMatch = token.match(/^\\U([0-9a-fA-F]{4,8})$/);
   const octalMatch = token.match(/^\\([0-7]{3})$/);
   if (unicodeMatch) {
@@ -81,8 +84,15 @@ function decodeKeyEquivalent(equivalent: string): Omit<ServiceAccelerator, 'name
       return null;
     }
   } else if (token.length === 1) {
-    // Uppercase letters encode implied Shift.
-    if (token >= 'A' && token <= 'Z' && !shift) {
+    const code = token.charCodeAt(0);
+    if (code >= F_KEY_BASE && code <= F_KEY_BASE + 23) {
+      key = `F${code - F_KEY_BASE + 1}`;
+    } else if (FUNCTION_KEY_NAMES[code]) {
+      key = FUNCTION_KEY_NAMES[code];
+    } else if (code === 0x001b) {
+      key = 'Escape';
+    } else if (token >= 'A' && token <= 'Z' && !shift) {
+      // Uppercase letters encode implied Shift.
       shift = true;
       key = token.toLowerCase();
     } else {
@@ -138,11 +148,13 @@ function readServiceAccelerators(): ServiceAccelerator[] {
 }
 
 function broadcastRegistry(): void {
+  const wins = BrowserWindow.getAllWindows();
+  if (wins.length === 0) return; // nothing can receive yet
   const entries = readServiceAccelerators();
   const json = JSON.stringify(entries);
   if (json === lastRegistryJson) return; // nothing changed
   lastRegistryJson = json;
-  for (const win of BrowserWindow.getAllWindows()) {
+  for (const win of wins) {
     win.webContents.send(IPC_CHANNELS.SERVICES_REGISTRY, entries);
   }
 }
@@ -188,6 +200,12 @@ export function initServicesBridge(): void {
   app.on('browser-window-focus', () => {
     if (debounceTimer) clearTimeout(debounceTimer);
     debounceTimer = setTimeout(broadcastRegistry, 300);
+  });
+
+  // The initial broadcast in initServicesBridge() can run before any window
+  // exists; deliver the registry to each window once its page has loaded.
+  app.on('browser-window-created', (_event, win) => {
+    win.webContents.once('did-finish-load', () => broadcastRegistry());
   });
 
   broadcastRegistry();
