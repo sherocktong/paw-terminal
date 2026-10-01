@@ -114,7 +114,8 @@ export class ShortcutsPanel {
         entries: [
           { keys: `${mod}+T`, description: 'New Tab' },
           { keys: `${mod}+W`, description: 'Close Tab' },
-          { keys: `${shiftMod}+N`, description: 'New Window' },
+          { keys: `${mod}+N`, description: 'New Window' },
+          { keys: `${shiftMod}+W`, description: 'Close Window' },
         ],
       },
       {
@@ -149,8 +150,10 @@ export class ShortcutsPanel {
       {
         name: 'Window',
         entries: [
+          ...(isMac ? [{ keys: 'Cmd+`', description: 'Switch to next window' }] : []),
           { keys: `${shiftMod}+Z`, description: 'Zoom Window (maximize)' },
           { keys: `${mod}+/`, description: 'Show / hide Keyboard Shortcuts' },
+          { keys: 'Esc', description: 'Close Keyboard Shortcuts' },
         ],
       },
     ];
