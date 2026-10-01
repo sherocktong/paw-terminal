@@ -37,6 +37,7 @@ export interface PuppyApi {
     saveState: (state: WindowState) => void;
     toggleMaximize: () => void;
     minimize: () => void;
+    close: () => void;
     quit: () => void;
   };
   menu: {
@@ -121,6 +122,7 @@ const api: PuppyApi = {
     saveState: (state: WindowState) => ipcRenderer.send(IPC_CHANNELS.WINDOW_STATE, state),
     toggleMaximize: () => ipcRenderer.send(IPC_CHANNELS.WINDOW_TOGGLE_MAXIMIZE),
     minimize: () => ipcRenderer.send(IPC_CHANNELS.WINDOW_MINIMIZE),
+    close: () => ipcRenderer.send(IPC_CHANNELS.WINDOW_CLOSE),
     quit: () => ipcRenderer.send(IPC_CHANNELS.APP_QUIT),
   },
   menu: {

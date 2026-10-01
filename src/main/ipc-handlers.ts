@@ -8,7 +8,7 @@ import type { IPty } from 'node-pty';
 
 const ptyMap = new Map<string, IPty>();
 
-export function registerIpcHandlers(mainWindow: BrowserWindow): void {
+export function registerIpcHandlers(): void {
   // Open links in the system default browser (only safe schemes)
   ipcMain.on(IPC_CHANNELS.APP_OPEN_EXTERNAL, (_event, url: string) => {
     if (typeof url === 'string' && /^https?:\/\//i.test(url)) {
@@ -26,7 +26,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
   });
 
   // Shell / PTY
-  ipcMain.handle(IPC_CHANNELS.SHELL_SPAWN, (_event, cwd?: string) => {
+  ipcMain.handle(IPC_CHANNELS.SHELL_SPAWN, (event, cwd?: string) => {
     const config = loadConfig();
     const cols = 80;
     const rows = 30;
@@ -34,17 +34,19 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     const id = crypto.randomUUID();
     ptyMap.set(id, ptyProcess);
 
+    // Route output back to the window that spawned the shell
+    const sender = event.sender;
+
     ptyProcess.onData((data) => {
-      // Use webContents to send data to renderer
-      if (!mainWindow.isDestroyed()) {
-        mainWindow.webContents.send(IPC_CHANNELS.SHELL_DATA, { id, data });
+      if (!sender.isDestroyed()) {
+        sender.send(IPC_CHANNELS.SHELL_DATA, { id, data });
       }
     });
 
     ptyProcess.onExit(({ exitCode, signal }) => {
       ptyMap.delete(id);
-      if (!mainWindow.isDestroyed()) {
-        mainWindow.webContents.send(IPC_CHANNELS.SHELL_EXIT, { id, exitCode, signal });
+      if (!sender.isDestroyed()) {
+        sender.send(IPC_CHANNELS.SHELL_EXIT, { id, exitCode, signal });
       }
     });
 
@@ -111,43 +113,40 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     return nativeTheme.shouldUseDarkColors ? 'dark' : 'light';
   });
 
-  nativeTheme.on('updated', () => {
-    const mode = nativeTheme.shouldUseDarkColors ? 'dark' : 'light';
-    BrowserWindow.getAllWindows().forEach((win) => {
-      win.webContents.send(IPC_CHANNELS.THEME_SYSTEM_CHANGED, mode);
-    });
-  });
-
   // Window toggle maximize
-  ipcMain.on(IPC_CHANNELS.WINDOW_TOGGLE_MAXIMIZE, () => {
-    if (mainWindow.isMaximized()) {
-      mainWindow.unmaximize();
+  ipcMain.on(IPC_CHANNELS.WINDOW_TOGGLE_MAXIMIZE, (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    if (!win) return;
+    if (win.isMaximized()) {
+      win.unmaximize();
     } else {
-      mainWindow.maximize();
+      win.maximize();
     }
   });
 
   // Minimize window
-  ipcMain.on(IPC_CHANNELS.WINDOW_MINIMIZE, () => {
-    mainWindow.minimize();
+  ipcMain.on(IPC_CHANNELS.WINDOW_MINIMIZE, (event) => {
+    BrowserWindow.fromWebContents(event.sender)?.minimize();
+  });
+
+  // Close the window that sent the request (used when the last tab closes)
+  ipcMain.on(IPC_CHANNELS.WINDOW_CLOSE, (event) => {
+    BrowserWindow.fromWebContents(event.sender)?.close();
   });
 
   // Quit app
   ipcMain.on(IPC_CHANNELS.APP_QUIT, () => {
     app.quit();
   });
+}
 
-  // Window state save on close
-  mainWindow.on('close', () => {
-    const config = loadConfig();
-    const bounds = mainWindow.getNormalBounds();
-    config.window = {
-      width: bounds.width,
-      height: bounds.height,
-      x: bounds.x,
-      y: bounds.y,
-      maximized: mainWindow.isMaximized(),
-    };
-    saveConfig(config);
+// Registered once at startup — not per-window — so theme changes fan out
+// to every window without duplicate listeners.
+export function registerThemeChangeHandler(): void {
+  nativeTheme.on('updated', () => {
+    const mode = nativeTheme.shouldUseDarkColors ? 'dark' : 'light';
+    BrowserWindow.getAllWindows().forEach((win) => {
+      win.webContents.send(IPC_CHANNELS.THEME_SYSTEM_CHANGED, mode);
+    });
   });
 }

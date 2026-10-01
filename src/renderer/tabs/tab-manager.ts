@@ -220,7 +220,8 @@ export class TabManager {
       this.stopScriptPolling();
       this.activeIndex = -1;
       this.renderTabBar();
-      window.puppy.window.quit();
+      // Close this window only; the app keeps running (macOS convention)
+      window.puppy.window.close();
       return;
     }
 
@@ -329,6 +330,9 @@ export class TabManager {
       if (tab.hasRunningScript) {
         const spinner = document.createElement('span');
         spinner.className = 'tab-spinner';
+        for (let s = 0; s < 8; s++) {
+          spinner.appendChild(document.createElement('i'));
+        }
         el.appendChild(spinner);
       }
 
@@ -415,8 +419,8 @@ export class TabManager {
         return;
       }
 
-      // Cmd/Ctrl+W: Close tab
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'w') {
+      // Cmd/Ctrl+W: Close tab (Shift distinguishes Cmd+Shift+W = close window)
+      if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'w') {
         e.preventDefault();
         if (this.activeIndex >= 0) {
           this.closeTab(this.activeIndex);

@@ -22,6 +22,7 @@ export const IPC_CHANNELS = {
   WINDOW_STATE: 'window:state',
   WINDOW_TOGGLE_MAXIMIZE: 'window:toggleMaximize',
   WINDOW_MINIMIZE: 'window:minimize',
+  WINDOW_CLOSE: 'window:close',
   APP_QUIT: 'app:quit',
   APP_OPEN_EXTERNAL: 'app:openExternal',
   SERVICES_REGISTRY: 'services:registry',

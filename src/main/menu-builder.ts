@@ -1,7 +1,7 @@
 import { app, Menu, MenuItemConstructorOptions, BrowserWindow, ipcMain } from 'electron';
 import { IPC_CHANNELS } from '../shared/constants';
 
-export function buildMenu(): Menu {
+export function buildMenu(onNewWindow?: () => void): Menu {
   const template: MenuItemConstructorOptions[] = [
     {
       label: app.name,
@@ -46,7 +46,7 @@ export function buildMenu(): Menu {
           label: 'New Window',
           accelerator: 'CmdOrCtrl+N',
           click: () => {
-            // TODO: implement multi-window support
+            onNewWindow?.();
           },
         },
         {
@@ -89,6 +89,10 @@ export function buildMenu(): Menu {
     },
     {
       label: 'Window',
+      // Marks this submenu as the app-wide macOS windows menu, so AppKit
+      // appends (and maintains) the list of open windows with a checkmark
+      // on the focused one.
+      role: 'window',
       submenu: [
         {
           label: 'Select Previous Tab',
@@ -132,7 +136,7 @@ export function buildMenu(): Menu {
   return Menu.buildFromTemplate(template);
 }
 
-export function setApplicationMenu(): void {
-  const menu = buildMenu();
+export function setApplicationMenu(onNewWindow?: () => void): void {
+  const menu = buildMenu(onNewWindow);
   Menu.setApplicationMenu(menu);
 }

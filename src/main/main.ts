@@ -1,12 +1,12 @@
 import { app, BrowserWindow } from 'electron';
 import path from 'path';
 import { createWindow } from './window-manager';
-import { registerIpcHandlers } from './ipc-handlers';
+import { registerIpcHandlers, registerThemeChangeHandler } from './ipc-handlers';
 import { setApplicationMenu } from './menu-builder';
-import { loadConfig } from './config-manager';
+import { loadConfig, saveConfig } from './config-manager';
 import { initServicesBridge } from './services-bridge';
 
-let mainWindow: BrowserWindow | null = null;
+const windows = new Set<BrowserWindow>();
 
 function getLoadUrl(): string {
   if (process.env.VITE_DEV_SERVER_URL) {
@@ -15,21 +15,34 @@ function getLoadUrl(): string {
   return path.join(__dirname, '../renderer/index.html');
 }
 
-async function createMainWindow(): Promise<void> {
+async function createAppWindow(): Promise<void> {
   const config = loadConfig();
-  mainWindow = createWindow(config);
-
-  registerIpcHandlers(mainWindow);
+  const win = createWindow(config);
+  windows.add(win);
 
   const loadUrl = getLoadUrl();
   if (loadUrl.startsWith('http')) {
-    await mainWindow.loadURL(loadUrl);
+    await win.loadURL(loadUrl);
   } else {
-    await mainWindow.loadFile(loadUrl);
+    await win.loadFile(loadUrl);
   }
 
-  mainWindow.on('closed', () => {
-    mainWindow = null;
+  // Save window bounds on close so the next launch restores them
+  win.on('close', () => {
+    const config = loadConfig();
+    const bounds = win.getNormalBounds();
+    config.window = {
+      width: bounds.width,
+      height: bounds.height,
+      x: bounds.x,
+      y: bounds.y,
+      maximized: win.isMaximized(),
+    };
+    saveConfig(config);
+  });
+
+  win.on('closed', () => {
+    windows.delete(win);
   });
 }
 
@@ -38,13 +51,19 @@ app.whenReady().then(() => {
     applicationName: app.name,
     applicationVersion: app.getVersion(),
   });
-  setApplicationMenu();
+  // IPC handlers are registered once and resolve the target window from
+  // the event sender, so every window shares the same handlers.
+  registerIpcHandlers();
+  registerThemeChangeHandler();
+  setApplicationMenu(() => {
+    createAppWindow();
+  });
   initServicesBridge();
-  createMainWindow();
+  createAppWindow();
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
-      createMainWindow();
+      createAppWindow();
     }
   });
 });
