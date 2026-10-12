@@ -20,7 +20,17 @@ export class ShortcutsPanel {
   constructor(container: HTMLElement, config: Config) {
     this.container = container;
     this.config = config;
+    // Pressing Esc closes the panel (see onKeyDown).
+    document.addEventListener('keydown', this.onKeyDown);
   }
+
+  private onKeyDown = (e: KeyboardEvent): void => {
+    if (!this.visible) return;
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      this.hide();
+    }
+  };
 
   updateConfig(config: Config): void {
     this.config = config;

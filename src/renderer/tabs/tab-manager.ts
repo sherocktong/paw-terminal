@@ -114,7 +114,11 @@ export class TabManager {
     // so TUI apps (e.g. Claude Code) don't also receive hjkl/G/etc.
     // Also let system shortcuts (e.g. Option+F5) pass through without being
     // consumed by the PTY.
+    // While the shortcuts panel is visible, return false too: xterm's keydown
+    // handler would otherwise stopPropagation() the event, so it would never
+    // bubble to `document` and the panel couldn't react to Esc / trap keys.
     term.attachCustomKeyEventHandler((e) => {
+      if (this.shortcutsPanel?.isVisible()) return false;
       if (copyMode.isActive()) return false;
       if (e.altKey && e.key === 'F5') return false;
       return true;
@@ -370,13 +374,9 @@ export class TabManager {
 
   private setupKeyboardShortcuts(): void {
     document.addEventListener('keydown', (e) => {
-      // Shortcuts panel takes precedence when visible
+      // Shortcuts panel takes precedence when visible. Escape closing is
+      // handled by ShortcutsPanel itself.
       if (this.shortcutsPanel?.isVisible()) {
-        if (e.key === 'Escape') {
-          e.preventDefault();
-          this.shortcutsPanel.hide();
-          return;
-        }
         if ((e.metaKey || e.ctrlKey) && e.key === '/') {
           e.preventDefault();
           this.shortcutsPanel.toggle();
