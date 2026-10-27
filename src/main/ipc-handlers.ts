@@ -3,12 +3,19 @@ import crypto from 'crypto';
 import { IPC_CHANNELS } from '../shared/constants';
 import { loadConfig, saveConfig } from './config-manager';
 import { spawnShell, getShellCwd, hasRunningScript, isShellInForeground } from './shell-manager';
-import type { Config } from '../shared/types';
+import type { Config, MenuActionId } from '../shared/types';
 import type { IPty } from 'node-pty';
+import { performMenuAction } from './menu-builder';
 
 const ptyMap = new Map<string, IPty>();
 
 export function registerIpcHandlers(): void {
+  // Menu actions forwarded by the renderer keyboard shortcut handler
+  // (needed on Windows/Linux where xterm.js consumes key events before
+  // Electron dispatches menu accelerators).
+  ipcMain.handle(IPC_CHANNELS.MENU_ACTION, (event, action: MenuActionId) => {
+    performMenuAction(action, event.sender);
+  });
   // Open links in the system default browser (only safe schemes)
   ipcMain.on(IPC_CHANNELS.APP_OPEN_EXTERNAL, (_event, url: string) => {
     if (typeof url === 'string' && /^https?:\/\//i.test(url)) {
@@ -75,12 +82,12 @@ export function registerIpcHandlers(): void {
     }
   });
 
-  ipcMain.handle(IPC_CHANNELS.SHELL_CWD, (_event, id: string): string | undefined => {
+  ipcMain.handle(IPC_CHANNELS.SHELL_CWD, (_event, id: string): Promise<string | undefined> => {
     const ptyProcess = ptyMap.get(id);
     if (ptyProcess) {
       return getShellCwd(ptyProcess.pid);
     }
-    return undefined;
+    return Promise.resolve(undefined);
   });
 
   ipcMain.handle(IPC_CHANNELS.SHELL_HAS_RUNNING_SCRIPT, async (_event, id: string): Promise<boolean> => {

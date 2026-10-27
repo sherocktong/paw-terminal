@@ -269,12 +269,11 @@ export async function getShellCwd(pid: number): Promise<string | undefined> {
       const fs = require('fs');
       return fs.readlinkSync(`/proc/${pid}/cwd`);
     } else if (platform === 'win32') {
-      // Windows: use PowerShell to get the process's current directory
-      const { stdout } = await execAsync(
-        `powershell.exe -NoProfile -Command "(Get-Process -Id ${pid}).Path"`,
-        { encoding: 'utf-8', timeout: 1000 }
-      );
-      return stdout.trim() || undefined;
+      // Windows has no simple API for reading another process's current
+      // directory (Get-Process .Path returns the *executable* path, not the
+      // CWD — passing it as a cwd fails with error 267). Return undefined so
+      // the caller falls back to the default working directory.
+      return undefined;
     }
   } catch {
     // Ignore errors (process may have exited)
@@ -324,7 +323,7 @@ export function spawnShell(
   // home directory). The shell trusts the PWD env var over its actual working
   // directory, so tools reading $PWD (e.g. mvim --remote) get the wrong path.
   let resolvedCwd = cwd || os.homedir();
-  if (!fs.existsSync(resolvedCwd)) {
+  if (!fs.existsSync(resolvedCwd) || !fs.statSync(resolvedCwd).isDirectory()) {
     console.warn(`CWD "${resolvedCwd}" does not exist, falling back to home directory.`);
     resolvedCwd = os.homedir();
   }

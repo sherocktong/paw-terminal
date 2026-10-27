@@ -27,6 +27,13 @@ export const IPC_CHANNELS = {
   APP_OPEN_EXTERNAL: 'app:openExternal',
   SERVICES_REGISTRY: 'services:registry',
   SERVICES_PERFORM: 'services:perform',
+  MENU_ACTION: 'menu:action',
+  MENU_NEW_TAB: 'menu:newTab',
+  MENU_CLOSE_TAB: 'menu:closeTab',
+  MENU_PREV_TAB: 'menu:prevTab',
+  MENU_NEXT_TAB: 'menu:nextTab',
+  MENU_SHOW_SHORTCUTS: 'menu:showShortcuts',
+  MENU_ZOOM: 'menu:zoom',
 } as const;
 
 export const DEFAULT_CONFIG: Config = {

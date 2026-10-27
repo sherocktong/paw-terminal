@@ -3,8 +3,21 @@ import type { Config } from '../shared/types';
 import { ThemeManager } from './theme/theme-manager';
 import { TabManager } from './tabs/tab-manager';
 import { ShortcutsPanel } from './shortcuts-panel/shortcuts-panel';
+import { installAppShortcutHandler } from './app-shortcuts';
 
 async function main(): Promise<void> {
+  // Install before any terminal exists so the app shortcuts (Ctrl+T, ...) are
+  // intercepted in the capture phase before xterm.js consumes them (needed on
+  // Windows/Linux where Electron does not dispatch menu accelerators for key
+  // events the renderer has handled).
+  installAppShortcutHandler();
+
+  // Mark the platform so CSS can apply macOS-only chrome adjustments
+  // (e.g. the tab bar reserves space for the traffic lights only on mac).
+  if (navigator.platform.toLowerCase().includes('mac')) {
+    document.body.classList.add('platform-mac');
+  }
+
   const terminalContainer = document.getElementById('terminal-container');
   const tabBar = document.getElementById('tab-bar');
   if (!terminalContainer || !tabBar) {

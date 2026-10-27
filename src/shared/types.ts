@@ -88,6 +88,21 @@ export interface Config {
 
 export type AppearanceMode = 'dark' | 'light';
 
+/**
+ * Application-level menu actions. These are triggered either by clicking the
+ * application menu or (on Windows/Linux, where xterm.js consumes the key
+ * events before Electron dispatches menu accelerators) by a capture-phase
+ * keyboard handler in the renderer that forwards the action over IPC.
+ */
+export type MenuActionId =
+  | 'newTab'
+  | 'closeTab'
+  | 'newWindow'
+  | 'showShortcuts'
+  | 'prevTab'
+  | 'nextTab'
+  | 'zoomWindow';
+
 export interface CopyModePosition {
   line: number;
   col: number;

@@ -18,12 +18,16 @@ html, body {
   padding-top: 6px;
   background: var(--tab-bar-bg, #1e1f29);
   border-bottom: 1px solid var(--tab-bar-border, #44475a);
-  padding-left: 84px; /* macOS traffic lights offset */
+  padding-left: 4px; /* body.platform-mac restores the 84px traffic-lights offset */
   padding-right: 4px;
   flex-shrink: 0;
   overflow-x: auto;
   overflow-y: hidden;
   -webkit-app-region: drag;
+}
+
+body.platform-mac #tab-bar {
+  padding-left: 84px; /* macOS traffic lights offset */
 }
 
 #tab-bar::-webkit-scrollbar {

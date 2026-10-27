@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron';
 import { IPC_CHANNELS } from '../shared/constants';
-import type { Config, AppearanceMode, WindowState, ServiceAccelerator } from '../shared/types';
+import type { Config, AppearanceMode, WindowState, ServiceAccelerator, MenuActionId } from '../shared/types';
 
 export interface PuppyApi {
   config: {
@@ -46,6 +46,7 @@ export interface PuppyApi {
     onPrevTab: (callback: () => void) => () => void;
     onNextTab: (callback: () => void) => () => void;
     onShowShortcuts: (callback: () => void) => () => void;
+    perform: (action: MenuActionId) => Promise<void>;
   };
   webUtils: {
     getPathForFile: (file: File) => string;
@@ -161,6 +162,7 @@ const api: PuppyApi = {
         ipcRenderer.removeListener('menu:showShortcuts', handler);
       };
     },
+    perform: (action: MenuActionId) => ipcRenderer.invoke(IPC_CHANNELS.MENU_ACTION, action),
   },
   webUtils: {
     getPathForFile: (file: File) => webUtils.getPathForFile(file),
