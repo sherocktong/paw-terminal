@@ -43,3 +43,62 @@ jobs:
             release/*.exe
             release/*.msi
             release/*.zip
+
+  release:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Compute next version
+        id: version
+        run: |
+          PKG_VERSION=$(node -p "require('./package.json').version")
+          LATEST_TAG=$(git tag -l 'v*' --sort=-v:refname | head -1 | sed 's/^v//')
+          HIGHEST=$(printf '%s\n' "$PKG_VERSION" "$LATEST_TAG" | grep -v '^$' | sort -V | tail -1)
+          if [ -n "$HIGHEST" ] && git rev-parse -q --verify "refs/tags/v$HIGHEST" >/dev/null; then
+            # tag already exists -> bump patch
+            NEXT=$(echo "$HIGHEST" | awk -F. 'NF==3{print $1"."$2"."$3+1; next} {print $0".1"}')
+          else
+            NEXT="$HIGHEST"
+          fi
+          [ -n "$NEXT" ] || NEXT="$PKG_VERSION"
+          echo "version=$NEXT" >> "$GITHUB_OUTPUT"
+          echo "Next release version: v$NEXT (package.json: $PKG_VERSION, latest tag: ${LATEST_TAG:-none})"
+
+      - name: Download macOS artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: dist-macos-latest
+          path: pkgs/macos
+
+      - name: Download Windows artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: dist-windows-latest
+          path: pkgs/windows
+
+      - name: Download Linux artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: dist-ubuntu-latest
+          path: pkgs/linux
+
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          FILES=$(find pkgs -type f \( -name '*.dmg' -o -name '*.AppImage' -o -name '*.exe' -o -name '*.msi' -o -name '*.zip' \) | sort)
+          echo "Release files:"
+          echo "$FILES"
+          gh release create "v$VERSION" $FILES \
+            --title "Paw v$VERSION" \
+            --generate-notes \
+            --latest
