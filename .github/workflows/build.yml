@@ -95,10 +95,12 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           VERSION: ${{ steps.version.outputs.version }}
         run: |
-          FILES=$(find pkgs -type f \( -name '*.dmg' -o -name '*.AppImage' -o -name '*.exe' -o -name '*.msi' -o -name '*.zip' \) | sort)
+          FILES=()
+          while IFS= read -r f; do FILES+=("$f"); done \
+            < <(find pkgs -type f \( -name '*.dmg' -o -name '*.AppImage' -o -name '*.exe' -o -name '*.msi' -o -name '*.zip' \) | sort)
           echo "Release files:"
-          echo "$FILES"
-          gh release create "v$VERSION" $FILES \
+          printf '%s\n' "${FILES[@]}"
+          gh release create "v$VERSION" "${FILES[@]}" \
             --title "Paw v$VERSION" \
             --generate-notes \
             --latest
