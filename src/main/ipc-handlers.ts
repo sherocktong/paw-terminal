@@ -1,6 +1,7 @@
 import { ipcMain, clipboard, nativeTheme, BrowserWindow, app, shell } from 'electron';
 import crypto from 'crypto';
 import { IPC_CHANNELS } from '../shared/constants';
+import { TITLE_BAR_HEIGHT } from './window-manager';
 import { loadConfig, saveConfig } from './config-manager';
 import { spawnShell, getShellCwd, hasRunningScript, isShellInForeground } from './shell-manager';
 import type { Config, MenuActionId } from '../shared/types';
@@ -114,6 +115,22 @@ export function registerIpcHandlers(): void {
   ipcMain.on(IPC_CHANNELS.CLIPBOARD_WRITE, (_event, text: string) => {
     clipboard.writeText(text);
   });
+
+  ipcMain.handle(IPC_CHANNELS.CLIPBOARD_READ, () => clipboard.readText());
+
+  // Keep the native window controls (Windows title bar overlay) in sync
+  ipcMain.on(
+    IPC_CHANNELS.WINDOW_SET_TITLEBAR,
+    (event, colors: { color: string; symbolColor: string }) => {
+      if (process.platform !== 'win32') return;
+      const win = BrowserWindow.fromWebContents(event.sender);
+      win?.setTitleBarOverlay({
+        color: colors.color,
+        symbolColor: colors.symbolColor,
+        height: TITLE_BAR_HEIGHT,
+      });
+    },
+  );
 
   // Theme
   ipcMain.handle(IPC_CHANNELS.THEME_GET_SYSTEM, () => {

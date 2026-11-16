@@ -21,6 +21,7 @@ export interface PuppyApi {
   };
   clipboard: {
     writeText: (text: string) => void;
+    readText: () => Promise<string>;
   };
   theme: {
     getSystem: () => Promise<AppearanceMode>;
@@ -39,6 +40,7 @@ export interface PuppyApi {
     minimize: () => void;
     close: () => void;
     quit: () => void;
+    setTitleBarColors: (color: string, symbolColor: string) => void;
   };
   menu: {
     onNewTab: (callback: () => void) => () => void;
@@ -46,10 +48,20 @@ export interface PuppyApi {
     onPrevTab: (callback: () => void) => () => void;
     onNextTab: (callback: () => void) => () => void;
     onShowShortcuts: (callback: () => void) => () => void;
+    onCopy: (callback: () => void) => () => void;
+    onPaste: (callback: () => void) => () => void;
     perform: (action: MenuActionId) => Promise<void>;
   };
   webUtils: {
     getPathForFile: (file: File) => string;
+  };
+}
+
+function onMenuChannel(channel: string, callback: () => void): () => void {
+  const handler = () => callback();
+  ipcRenderer.on(channel, handler);
+  return () => {
+    ipcRenderer.removeListener(channel, handler);
   };
 }
 
@@ -94,6 +106,7 @@ const api: PuppyApi = {
   },
   clipboard: {
     writeText: (text: string) => ipcRenderer.send(IPC_CHANNELS.CLIPBOARD_WRITE, text),
+    readText: () => ipcRenderer.invoke(IPC_CHANNELS.CLIPBOARD_READ),
   },
   theme: {
     getSystem: () => ipcRenderer.invoke(IPC_CHANNELS.THEME_GET_SYSTEM),
@@ -125,6 +138,8 @@ const api: PuppyApi = {
     minimize: () => ipcRenderer.send(IPC_CHANNELS.WINDOW_MINIMIZE),
     close: () => ipcRenderer.send(IPC_CHANNELS.WINDOW_CLOSE),
     quit: () => ipcRenderer.send(IPC_CHANNELS.APP_QUIT),
+    setTitleBarColors: (color: string, symbolColor: string) =>
+      ipcRenderer.send(IPC_CHANNELS.WINDOW_SET_TITLEBAR, { color, symbolColor }),
   },
   menu: {
     onNewTab: (callback) => {
@@ -162,6 +177,8 @@ const api: PuppyApi = {
         ipcRenderer.removeListener('menu:showShortcuts', handler);
       };
     },
+    onCopy: (callback) => onMenuChannel(IPC_CHANNELS.MENU_COPY, callback),
+    onPaste: (callback) => onMenuChannel(IPC_CHANNELS.MENU_PASTE, callback),
     perform: (action: MenuActionId) => ipcRenderer.invoke(IPC_CHANNELS.MENU_ACTION, action),
   },
   webUtils: {

@@ -1,25 +1,38 @@
 import { BrowserWindow, nativeTheme } from 'electron';
 import path from 'path';
 import { BUILTIN_THEMES } from '../shared/constants';
-import type { Config, AppearanceMode, WindowState } from '../shared/types';
+import { computeTabColors } from '../shared/tab-colors';
+import type { Config, AppearanceMode, WindowState, Theme } from '../shared/types';
+
+const isMac = process.platform === 'darwin';
+const isWindows = process.platform === 'win32';
+
+/** Height of the tab strip, which doubles as the custom title bar. */
+export const TITLE_BAR_HEIGHT = 32;
+
+function resolveTheme(config: Config, isDark: boolean): Theme | undefined {
+  const themeId = isDark ? config.darkTheme : config.lightTheme;
+  const builtin = BUILTIN_THEMES.find((t) => t.id === themeId) as Theme | undefined;
+  return config.customThemes.find((t) => t.id === themeId) ?? builtin;
+}
 
 function getInitialBackgroundColor(config: Config): string {
   const isDark = nativeTheme.shouldUseDarkColors;
-  const themeId = isDark ? config.darkTheme : config.lightTheme;
-
-  const custom = config.customThemes.find((t) => t.id === themeId);
-  if (custom) return custom.colors.background;
-
-  const builtin = BUILTIN_THEMES.find((t) => t.id === themeId);
-  if (builtin) return builtin.colors.background;
-
+  const theme = resolveTheme(config, isDark);
+  if (theme) return theme.colors.background;
   return isDark ? '#282a36' : '#e5e5e5';
 }
 
-const isMac = process.platform === 'darwin';
+function getWindowChromeColor(config: Config): string {
+  const theme = resolveTheme(config, nativeTheme.shouldUseDarkColors);
+  if (!theme) return nativeTheme.shouldUseDarkColors ? '#2e2e2e' : '#e8e8e8';
+  return computeTabColors(theme).barBg;
+}
 
 export function createWindow(config: Config): BrowserWindow {
   const winState = config.window;
+  const theme = resolveTheme(config, nativeTheme.shouldUseDarkColors);
+  const tabColors = theme ? computeTabColors(theme) : null;
 
   const win = new BrowserWindow({
     width: winState.width,
@@ -28,8 +41,17 @@ export function createWindow(config: Config): BrowserWindow {
     y: winState.y,
     title: 'Paw',
     backgroundColor: getInitialBackgroundColor(config),
-    titleBarStyle: isMac ? 'hidden' : undefined,
-    frame: !isMac,
+    // On Windows/macOS the tab strip doubles as the title bar. Windows keeps
+    // native window controls via the title bar overlay.
+    titleBarStyle: isMac || isWindows ? 'hidden' : undefined,
+    titleBarOverlay: isWindows
+      ? {
+          color: tabColors?.barBg ?? getWindowChromeColor(config),
+          symbolColor: tabColors?.symbolColor ?? '#ffffff',
+          height: TITLE_BAR_HEIGHT,
+        }
+      : undefined,
+    frame: isMac ? false : undefined,
     trafficLightPosition: isMac ? { x: 16, y: 10 } : undefined,
     hasShadow: false,
     show: false,
@@ -56,21 +78,18 @@ export function createWindow(config: Config): BrowserWindow {
 }
 
 export function applyAppearance(win: BrowserWindow, mode: AppearanceMode, config: Config): void {
-  const themeId = mode === 'dark' ? config.darkTheme : config.lightTheme;
+  const theme = resolveTheme(config, mode === 'dark');
 
-  const custom = config.customThemes.find((t) => t.id === themeId);
-  if (custom) {
-    win.setBackgroundColor(custom.colors.background);
-    return;
+  win.setBackgroundColor(theme?.colors.background ?? (mode === 'dark' ? '#282a36' : '#e5e5e5'));
+
+  if (isWindows && theme) {
+    const tabColors = computeTabColors(theme);
+    win.setTitleBarOverlay({
+      color: tabColors.barBg,
+      symbolColor: tabColors.symbolColor,
+      height: TITLE_BAR_HEIGHT,
+    });
   }
-
-  const builtin = BUILTIN_THEMES.find((t) => t.id === themeId);
-  if (builtin) {
-    win.setBackgroundColor(builtin.colors.background);
-    return;
-  }
-
-  win.setBackgroundColor(mode === 'dark' ? '#282a36' : '#e5e5e5');
 }
 
 export function getCurrentWindowState(win: BrowserWindow): WindowState {

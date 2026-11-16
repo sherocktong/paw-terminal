@@ -164,6 +164,208 @@ body.platform-mac #tab-bar {
   color: var(--tab-hover-fg, #f8f8f2);
 }
 
+/* ---------------------------------------------------------------------- */
+/* Windows Terminal style tab strip (Windows only)                       */
+/* macOS keeps the flat tab bar above untouched.                          */
+/* ---------------------------------------------------------------------- */
+body.platform-win #tab-bar {
+  align-items: stretch;
+  height: 32px;
+  padding: 0 4px 0 8px;
+  /* Leave room for the native window controls drawn over the strip */
+  padding-right: calc(100% - env(titlebar-area-width, 100%) + 4px);
+  background: var(--tab-bar-bg, #2e2e2e);
+  border-bottom: none;
+  gap: 0;
+  user-select: none;
+}
+
+body.platform-win #tab-bar .tab-dropdown {
+  -webkit-app-region: no-drag;
+}
+
+body.platform-win .tab {
+  height: 100%;
+  padding: 0 4px 0 10px;
+  border: none;
+  border-radius: 7px 7px 0 0;
+  background: transparent;
+  color: var(--tab-fg, rgba(255, 255, 255, 0.55));
+  cursor: default;
+  flex: 1 1 0;
+  min-width: 96px;
+  max-width: 240px;
+  margin-bottom: 0;
+  overflow: hidden;
+}
+
+body.platform-win .tab:hover {
+  background: var(--tab-hover-bg, rgba(255, 255, 255, 0.07));
+  color: var(--tab-hover-fg, rgba(255, 255, 255, 0.9));
+}
+
+/* The active tab uses the terminal background so it merges with the content */
+body.platform-win .tab.active {
+  background: var(--tab-active-bg, #0c0c0c);
+  color: var(--tab-active-fg, #f8f8f2);
+  border: none;
+  border-radius: 7px 7px 0 0;
+  margin-bottom: 0;
+  padding-bottom: 0;
+}
+
+.tab-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  opacity: 0.55;
+}
+
+body.platform-win .tab.active .tab-icon {
+  opacity: 0.85;
+}
+
+.tab-icon svg {
+  width: 14px;
+  height: 14px;
+  display: block;
+}
+
+body.platform-win .tab-close {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  opacity: 0;
+  transition: background 0.12s, opacity 0.12s;
+}
+
+body.platform-win .tab:hover .tab-close,
+body.platform-win .tab.active .tab-close {
+  opacity: 0.65;
+}
+
+body.platform-win .tab-close:hover {
+  background: var(--tab-close-hover-bg, rgba(255, 255, 255, 0.16));
+  color: inherit;
+  opacity: 1;
+}
+
+.tab-close svg {
+  width: 10px;
+  height: 10px;
+  display: block;
+}
+
+body.platform-win .tab-add {
+  align-self: center;
+  width: 28px;
+  height: 24px;
+  margin-left: 6px;
+  border-radius: 4px;
+  color: var(--tab-add-fg, rgba(255, 255, 255, 0.7));
+  cursor: default;
+  font-size: inherit;
+}
+
+body.platform-win .tab-add:hover {
+  background: var(--tab-hover-bg, rgba(255, 255, 255, 0.07));
+  color: var(--tab-hover-fg, #f8f8f2);
+}
+
+.tab-add svg {
+  width: 12px;
+  height: 12px;
+  display: block;
+}
+
+.tab-dropdown-divider {
+  align-self: center;
+  width: 1px;
+  height: 16px;
+  margin: 0 2px;
+  background: var(--tab-divider, rgba(255, 255, 255, 0.16));
+  flex-shrink: 0;
+}
+
+.tab-dropdown {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  align-self: center;
+  width: 22px;
+  height: 24px;
+  border-radius: 4px;
+  color: var(--tab-add-fg, rgba(255, 255, 255, 0.7));
+  cursor: default;
+  flex-shrink: 0;
+  transition: background 0.12s, color 0.12s;
+}
+
+.tab-dropdown:hover,
+.tab-dropdown.open {
+  background: var(--tab-hover-bg, rgba(255, 255, 255, 0.07));
+  color: var(--tab-hover-fg, #f8f8f2);
+}
+
+.tab-dropdown svg {
+  width: 10px;
+  height: 10px;
+  display: block;
+}
+
+.tab-menu {
+  position: fixed;
+  z-index: 3000;
+  min-width: 200px;
+  padding: 4px;
+  border-radius: 8px;
+  background: var(--tab-menu-bg, #343746);
+  border: 1px solid var(--tab-menu-border, rgba(255, 255, 255, 0.14));
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  color: var(--tab-menu-fg, #f8f8f2);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 12px;
+  -webkit-app-region: no-drag;
+  user-select: none;
+}
+
+.tab-menu-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 5px 8px;
+  border-radius: 5px;
+  cursor: default;
+}
+
+.tab-menu-item:hover {
+  background: var(--tab-menu-hover-bg, rgba(255, 255, 255, 0.12));
+}
+
+.tab-menu-item.disabled {
+  opacity: 0.4;
+  pointer-events: none;
+}
+
+.tab-menu-shortcut {
+  color: var(--tab-menu-shortcut, rgba(255, 255, 255, 0.5));
+  font-size: 11px;
+}
+
+.tab-menu-separator {
+  height: 1px;
+  margin: 4px 2px;
+  background: var(--tab-menu-border, rgba(255, 255, 255, 0.14));
+}
+
+body.platform-win .tab-terminal-container.drag-over::after {
+  border-color: var(--tab-accent, #6272a4);
+}
+
 #terminal-container {
   flex: 1;
   position: relative;

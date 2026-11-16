@@ -129,6 +129,13 @@ export class ShortcutsPanel {
         ],
       },
       {
+        name: 'Clipboard',
+        entries: [
+          { keys: `${mod}+C`, description: 'Copy selection (interrupt when nothing is selected)' },
+          { keys: `${mod}+V`, description: 'Paste' },
+        ],
+      },
+      {
         name: 'Tab Navigation',
         entries: [
           { keys: `${shiftMod}+[`, description: 'Previous Tab' },

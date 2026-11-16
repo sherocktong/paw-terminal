@@ -4,6 +4,7 @@ import { ThemeManager } from './theme/theme-manager';
 import { TabManager } from './tabs/tab-manager';
 import { ShortcutsPanel } from './shortcuts-panel/shortcuts-panel';
 import { installAppShortcutHandler } from './app-shortcuts';
+import { isMacPlatform, isWindowsPlatform } from './platform';
 
 async function main(): Promise<void> {
   // Install before any terminal exists so the app shortcuts (Ctrl+T, ...) are
@@ -12,9 +13,12 @@ async function main(): Promise<void> {
   // events the renderer has handled).
   installAppShortcutHandler();
 
-  // Mark the platform so CSS can apply macOS-only chrome adjustments
-  // (e.g. the tab bar reserves space for the traffic lights only on mac).
-  if (navigator.platform.toLowerCase().includes('mac')) {
+  // Mark the platform so CSS can apply platform-specific chrome:
+  // macOS keeps its traffic lights / flat tab bar, Windows gets the
+  // Windows Terminal style tab strip.
+  if (isWindowsPlatform) {
+    document.body.classList.add('platform-win');
+  } else if (isMacPlatform) {
     document.body.classList.add('platform-mac');
   }
 
@@ -60,6 +64,8 @@ async function main(): Promise<void> {
   window.puppy.menu.onPrevTab(() => tabManager.prevTab());
   window.puppy.menu.onNextTab(() => tabManager.nextTab());
   window.puppy.menu.onShowShortcuts(() => shortcutsPanel.toggle());
+  window.puppy.menu.onCopy(() => tabManager.copySelection());
+  window.puppy.menu.onPaste(() => tabManager.paste());
 }
 
 main().catch(console.error);

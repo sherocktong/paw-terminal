@@ -32,6 +32,12 @@ export function performMenuAction(action: MenuActionId, sender: Electron.WebCont
     case 'zoomWindow':
       sender?.send(IPC_CHANNELS.MENU_ZOOM);
       break;
+    case 'copy':
+      sender?.send(IPC_CHANNELS.MENU_COPY);
+      break;
+    case 'paste':
+      sender?.send(IPC_CHANNELS.MENU_PASTE);
+      break;
   }
 }
 
@@ -82,11 +88,39 @@ export function setApplicationMenu(onNewWindow: () => void): void {
     },
     {
       label: 'Edit',
-      submenu: [
-        { role: 'copy' },
-        { role: 'paste' },
-        { role: 'selectAll' },
-      ],
+      submenu: isMac
+        ? [
+            { role: 'undo' },
+            { role: 'redo' },
+            { type: 'separator' },
+            { role: 'cut' },
+            { role: 'copy' },
+            { role: 'paste' },
+            { role: 'selectAll' },
+          ]
+        : [
+            // The renderer handles these keys itself so that Ctrl+C keeps
+            // sending SIGINT to the shell when nothing is selected.
+            {
+              label: 'Copy',
+              accelerator: 'CmdOrCtrl+C',
+              registerAccelerator: false,
+              click: actionClick('copy'),
+            },
+            {
+              label: 'Paste',
+              accelerator: 'CmdOrCtrl+V',
+              registerAccelerator: false,
+              click: actionClick('paste'),
+            },
+            { type: 'separator' },
+            {
+              label: 'Select All',
+              accelerator: 'CmdOrCtrl+A',
+              registerAccelerator: false,
+              click: () => {},
+            },
+          ],
     },
     {
       label: 'View',

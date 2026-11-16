@@ -122,6 +122,10 @@ export class CopyMode {
 
     // Handle search input mode
     if (this.isSearching) {
+      // Let clipboard shortcuts reach the search input
+      if ((e.ctrlKey || e.metaKey) && ['a', 'c', 'v', 'x'].includes(e.key.toLowerCase())) {
+        return false;
+      }
       if (e.key === 'Escape') {
         e.preventDefault();
         this.cancelSearch();

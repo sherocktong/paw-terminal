@@ -1,6 +1,8 @@
 import { Terminal } from '@xterm/xterm';
 import { BUILTIN_THEMES } from '../../shared/constants';
 import type { Config, Theme, AppearanceMode } from '../../shared/types';
+import { computeTabColors, mixHex, withAlpha } from '../../shared/tab-colors';
+import { isWindowsPlatform } from '../platform';
 
 export class ThemeManager {
   private terms = new Set<Terminal>();
@@ -119,6 +121,32 @@ export class ThemeManager {
     root.style.setProperty('--tab-active-bg', theme.colors.background);
     root.style.setProperty('--tab-active-fg', isLight ? '#000000' : '#f8f8f2');
     root.style.setProperty('--tab-separator', isLight ? 'rgba(0, 0, 0, 0.12)' : 'rgba(255, 255, 255, 0.06)');
+
+    // Windows Terminal style tab strip: the active tab uses the exact terminal
+    // background so it merges with the content; everything else is a shade
+    // derived from the theme. macOS keeps the palette above untouched.
+    if (isWindowsPlatform) {
+      const tab = computeTabColors(theme);
+      root.style.setProperty('--tab-bar-bg', tab.barBg);
+      root.style.setProperty('--tab-active-bg', tab.activeBg);
+      root.style.setProperty('--tab-active-fg', theme.colors.foreground);
+      root.style.setProperty('--tab-bg', 'transparent');
+      root.style.setProperty('--tab-fg', withAlpha(theme.colors.foreground, 0.55));
+      root.style.setProperty('--tab-hover-bg', tab.hoverBg);
+      root.style.setProperty('--tab-hover-fg', theme.colors.foreground);
+      root.style.setProperty('--tab-divider', tab.divider);
+      root.style.setProperty('--tab-add-fg', withAlpha(theme.colors.foreground, 0.7));
+      root.style.setProperty('--tab-close-hover-bg', withAlpha(theme.colors.foreground, 0.16));
+      root.style.setProperty('--tab-menu-bg', mixHex(tab.barBg, theme.colors.foreground, isLight ? 0.06 : 0.08));
+      root.style.setProperty('--tab-menu-fg', theme.colors.foreground);
+      root.style.setProperty('--tab-menu-border', withAlpha(theme.colors.foreground, 0.14));
+      root.style.setProperty('--tab-menu-hover-bg', withAlpha(theme.colors.foreground, 0.12));
+      root.style.setProperty('--tab-menu-shortcut', withAlpha(theme.colors.foreground, 0.5));
+      root.style.setProperty('--tab-accent', withAlpha(theme.colors.foreground, 0.55));
+
+      // Keep the native window controls (title bar overlay) in sync
+      window.puppy.window.setTitleBarColors(tab.barBg, theme.colors.foreground);
+    }
 
     document.documentElement.style.background = theme.colors.background;
     document.body.style.background = theme.colors.background;

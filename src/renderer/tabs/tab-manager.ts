@@ -6,6 +6,25 @@ import { initializeTerminal, resizeTerminal } from '../terminal/terminal';
 import { ThemeManager } from '../theme/theme-manager';
 import { CopyMode } from '../copy-mode/copy-mode';
 import { ShortcutsPanel } from '../shortcuts-panel/shortcuts-panel';
+import { isWindowsPlatform } from '../platform';
+
+// Inline icons for the Windows Terminal style tab strip
+const TAB_ICON_SVG =
+  '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round">' +
+  '<rect x="1.6" y="2.6" width="12.8" height="10.8" rx="1.6"/>' +
+  '<path d="M4.4 6.2 6.6 8l-2.2 1.8"/><path d="M8.4 9.8h3.2"/></svg>';
+
+const CLOSE_ICON_SVG =
+  '<svg viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round">' +
+  '<path d="M2 2l6 6M8 2l-6 6"/></svg>';
+
+const PLUS_ICON_SVG =
+  '<svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round">' +
+  '<path d="M6 1.5v9M1.5 6h9"/></svg>';
+
+const CHEVRON_ICON_SVG =
+  '<svg viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round">' +
+  '<path d="M1.8 3.6 5 6.8l3.2-3.2"/></svg>';
 
 // AppKit function-key names used in the pbs registry vs DOM KeyboardEvent.key.
 const KEY_NAME_ALIASES: Record<string, string> = {
@@ -48,6 +67,9 @@ export class TabManager {
   private resizeObserver: ResizeObserver | null = null;
   private cwdPollInterval: NodeJS.Timeout | null = null;
   private shortcutsPanel: ShortcutsPanel | null = null;
+  private tabMenu: HTMLElement | null = null;
+  /** Windows gets the Windows Terminal style tab strip. */
+  private readonly windows = isWindowsPlatform;
   private scriptPollInterval: NodeJS.Timeout | null = null;
   // macOS Services shortcuts mirrored from the pbs registry (mac only;
   // always empty elsewhere, which disables the matcher).
@@ -121,6 +143,8 @@ export class TabManager {
       if (this.shortcutsPanel?.isVisible()) return false;
       if (copyMode.isActive()) return false;
       if (e.altKey && e.key === 'F5') return false;
+      // Ctrl+C copies the selection, otherwise it stays SIGINT for the shell
+      if (this.handleTerminalClipboardKey(e, term)) return false;
       return true;
     });
 
@@ -323,6 +347,7 @@ export class TabManager {
   }
 
   private renderTabBar(): void {
+    this.closeTabMenu();
     this.tabBar.innerHTML = '';
 
     for (let i = 0; i < this.tabs.length; i++) {
@@ -338,6 +363,11 @@ export class TabManager {
           spinner.appendChild(document.createElement('i'));
         }
         el.appendChild(spinner);
+      } else if (this.windows) {
+        const icon = document.createElement('span');
+        icon.className = 'tab-icon';
+        icon.innerHTML = TAB_ICON_SVG;
+        el.appendChild(icon);
       }
 
       const label = document.createElement('span');
@@ -347,7 +377,12 @@ export class TabManager {
 
       const closeBtn = document.createElement('span');
       closeBtn.className = 'tab-close';
-      closeBtn.textContent = '×';
+      if (this.windows) {
+        closeBtn.title = 'Close Tab';
+        closeBtn.innerHTML = CLOSE_ICON_SVG;
+      } else {
+        closeBtn.textContent = '\u00d7';
+      }
       closeBtn.addEventListener('click', (e) => {
         e.stopPropagation();
         this.closeTab(i);
@@ -355,15 +390,46 @@ export class TabManager {
       el.appendChild(closeBtn);
 
       el.addEventListener('click', () => this.activateTab(i));
+
+      if (this.windows) {
+        // Middle click closes the tab, like Windows Terminal
+        el.addEventListener('auxclick', (e) => {
+          if (e.button === 1) {
+            e.preventDefault();
+            this.closeTab(i);
+          }
+        });
+      }
+
       this.tabBar.appendChild(el);
     }
 
     const addBtn = document.createElement('div');
     addBtn.className = 'tab-add';
-    addBtn.textContent = '+';
-    addBtn.title = 'New Tab';
+    if (this.windows) {
+      addBtn.innerHTML = PLUS_ICON_SVG;
+    } else {
+      addBtn.textContent = '+';
+    }
+    addBtn.title = this.windows ? 'New Tab (Ctrl+T)' : 'New Tab';
     addBtn.addEventListener('click', () => this.addTab());
     this.tabBar.appendChild(addBtn);
+
+    if (!this.windows) return;
+
+    const divider = document.createElement('div');
+    divider.className = 'tab-dropdown-divider';
+    this.tabBar.appendChild(divider);
+
+    const dropdownBtn = document.createElement('div');
+    dropdownBtn.className = 'tab-dropdown';
+    dropdownBtn.title = 'Tab Menu';
+    dropdownBtn.innerHTML = CHEVRON_ICON_SVG;
+    dropdownBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.toggleTabMenu(dropdownBtn);
+    });
+    this.tabBar.appendChild(dropdownBtn);
   }
 
   private setupGlobalDataListener(): void {
@@ -374,6 +440,9 @@ export class TabManager {
 
   private setupKeyboardShortcuts(): void {
     document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && this.tabMenu) {
+        this.closeTabMenu();
+      }
       // Shortcuts panel takes precedence when visible. Escape closing is
       // handled by ShortcutsPanel itself.
       if (this.shortcutsPanel?.isVisible()) {
@@ -390,6 +459,11 @@ export class TabManager {
       if ((e.metaKey || e.ctrlKey) && e.key === '/') {
         e.preventDefault();
         this.shortcutsPanel?.toggle();
+        return;
+      }
+
+      // Clipboard shortcuts for focused text inputs (search, settings inputs)
+      if (this.handleInputClipboardKey(e)) {
         return;
       }
 
@@ -832,5 +906,206 @@ export class TabManager {
       }
     }
     return null;
+  }
+
+  // --- Clipboard ---------------------------------------------------------
+
+  /** Copy the active terminal's selection (used by the Edit menu). */
+  copySelection(): void {
+    const tab = this.getActiveTab();
+    if (!tab) return;
+    // Copy mode owns its own clipboard handling
+    if (tab.copyMode.isActive()) return;
+    if (!tab.term.hasSelection()) return;
+    this.copyText(tab.term.getSelection());
+  }
+
+  /** Paste into the focused input, otherwise into the active terminal. */
+  paste(): void {
+    const input = this.getFocusedTextInput();
+    if (input) {
+      void window.puppy.clipboard.readText().then((text) => {
+        if (text) this.insertIntoInput(input, text);
+      });
+      return;
+    }
+    const tab = this.getActiveTab();
+    if (!tab) return;
+    this.pasteIntoTerminal(tab.term);
+  }
+
+  /**
+   * Ctrl/Cmd+C and Ctrl/Cmd+V inside xterm. Ctrl+C only copies when there is
+   * a selection, so an unselected Ctrl+C still reaches the shell as SIGINT.
+   */
+  private handleTerminalClipboardKey(e: KeyboardEvent, term: Terminal): boolean {
+    if (!(e.ctrlKey || e.metaKey) || e.altKey) return false;
+    const key = e.key.toLowerCase();
+
+    if (key === 'c' && !e.shiftKey) {
+      if (!term.hasSelection()) return false;
+      e.preventDefault();
+      this.copyText(term.getSelection());
+      return true;
+    }
+
+    if (key === 'v') {
+      e.preventDefault();
+      this.pasteIntoTerminal(term);
+      return true;
+    }
+
+    return false;
+  }
+
+  private copyText(text: string): void {
+    if (!text) return;
+    void window.puppy.clipboard.writeText(text);
+  }
+
+  private pasteIntoTerminal(term: Terminal): void {
+    void window.puppy.clipboard.readText().then((text) => {
+      if (!text) return;
+      term.focus();
+      term.paste(text);
+    });
+  }
+
+  private getActiveTab(): Tab | null {
+    if (this.activeIndex < 0 || this.activeIndex >= this.tabs.length) return null;
+    return this.tabs[this.activeIndex];
+  }
+
+  /** Returns the focused DOM text input, ignoring xterm's hidden textarea. */
+  private getFocusedTextInput(): HTMLInputElement | HTMLTextAreaElement | null {
+    const el = document.activeElement;
+    if (el instanceof HTMLTextAreaElement) return el;
+    if (el instanceof HTMLInputElement) {
+      const type = el.type.toLowerCase();
+      const textTypes = ['text', 'search', 'url', 'tel', 'password', 'email', 'number'];
+      return textTypes.includes(type) ? el : null;
+    }
+    return null;
+  }
+
+  /** Global Ctrl/Cmd+C/V handling for regular text inputs. */
+  private handleInputClipboardKey(e: KeyboardEvent): boolean {
+    if (!(e.ctrlKey || e.metaKey) || e.altKey) return false;
+    const input = this.getFocusedTextInput();
+    if (!input) return false;
+    const key = e.key.toLowerCase();
+
+    if (key === 'v' && !e.shiftKey) {
+      e.preventDefault();
+      void window.puppy.clipboard.readText().then((text) => {
+        if (text) this.insertIntoInput(input, text);
+      });
+      return true;
+    }
+
+    if (key === 'c' && !e.shiftKey) {
+      const start = input.selectionStart ?? 0;
+      const end = input.selectionEnd ?? 0;
+      if (start === end) return false;
+      e.preventDefault();
+      this.copyText(input.value.slice(start, end));
+      return true;
+    }
+
+    return false;
+  }
+
+  private insertIntoInput(input: HTMLInputElement | HTMLTextAreaElement, text: string): void {
+    // <input> cannot contain newlines, mirror the browser behaviour
+    const value = input instanceof HTMLInputElement ? text.replace(/[\r\n]+/g, ' ') : text;
+    const start = input.selectionStart ?? input.value.length;
+    const end = input.selectionEnd ?? input.value.length;
+    input.value = input.value.slice(0, start) + value + input.value.slice(end);
+    const caret = start + value.length;
+    input.setSelectionRange(caret, caret);
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+  }
+
+  // --- Tab dropdown menu (Windows) --------------------------------------
+
+  private toggleTabMenu(anchor: HTMLElement): void {
+    if (this.tabMenu) {
+      this.closeTabMenu();
+      return;
+    }
+
+    const menu = document.createElement('div');
+    menu.className = 'tab-menu';
+
+    const addItem = (label: string, shortcut: string, onClick: () => void, disabled = false) => {
+      const item = document.createElement('div');
+      item.className = 'tab-menu-item' + (disabled ? ' disabled' : '');
+      const text = document.createElement('span');
+      text.textContent = label;
+      const keys = document.createElement('span');
+      keys.className = 'tab-menu-shortcut';
+      keys.textContent = shortcut;
+      item.appendChild(text);
+      item.appendChild(keys);
+      item.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.closeTabMenu();
+        onClick();
+      });
+      menu.appendChild(item);
+    };
+
+    const separator = () => {
+      const sep = document.createElement('div');
+      sep.className = 'tab-menu-separator';
+      menu.appendChild(sep);
+    };
+
+    addItem('New Tab', 'Ctrl+T', () => this.addTab());
+    addItem('Close Tab', 'Ctrl+W', () => this.closeTab(this.activeIndex), this.tabs.length === 0);
+    separator();
+    addItem('Previous Tab', 'Ctrl+Shift+Tab', () => {
+      const count = this.tabs.length;
+      if (count) this.activateTab((this.activeIndex - 1 + count) % count);
+    });
+    addItem('Next Tab', 'Ctrl+Tab', () => {
+      const count = this.tabs.length;
+      if (count) this.activateTab((this.activeIndex + 1) % count);
+    });
+    separator();
+    addItem('Keyboard Shortcuts', 'Ctrl+/', () => this.shortcutsPanel?.toggle());
+
+    document.body.appendChild(menu);
+    this.tabMenu = menu;
+
+    // Position under the anchor, clamped away from the native window controls
+    const anchorRect = anchor.getBoundingClientRect();
+    const barRect = this.tabBar.getBoundingClientRect();
+    const paddingRight = parseFloat(getComputedStyle(this.tabBar).paddingRight) || 0;
+    const safeRight = barRect.right - paddingRight;
+    const menuRect = menu.getBoundingClientRect();
+    const left = Math.min(anchorRect.left, safeRight - menuRect.width - 8);
+    menu.style.left = `${Math.max(8, left)}px`;
+    menu.style.top = `${anchorRect.bottom + 4}px`;
+    anchor.classList.add('open');
+
+    // Dismiss on outside click
+    setTimeout(() => {
+      const onDown = (ev: MouseEvent) => {
+        if (this.tabMenu && !this.tabMenu.contains(ev.target as Node)) {
+          this.closeTabMenu();
+        }
+      };
+      document.addEventListener('mousedown', onDown, { once: true });
+    }, 0);
+  }
+
+  private closeTabMenu(): void {
+    if (this.tabMenu) {
+      this.tabMenu.remove();
+      this.tabMenu = null;
+    }
+    const open = this.tabBar.querySelector('.tab-dropdown.open');
+    open?.classList.remove('open');
   }
 }

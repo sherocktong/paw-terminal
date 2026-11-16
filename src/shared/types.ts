@@ -101,6 +101,8 @@ export type MenuActionId =
   | 'showShortcuts'
   | 'prevTab'
   | 'nextTab'
+  | 'copy'
+  | 'paste'
   | 'zoomWindow';
 
 export interface CopyModePosition {
@@ -139,8 +141,10 @@ export interface IpcChannels {
   'shell:exit': () => { id: string; exitCode?: number; signal?: number };
   'shell:cwd': () => string | undefined;
   'clipboard:write': (text: string) => void;
+  'clipboard:read': () => string;
   'theme:getSystem': () => AppearanceMode;
   'theme:systemChanged': (mode: AppearanceMode) => void;
   'window:state': (state: WindowState) => void;
   'window:toggleMaximize': () => void;
+  'window:setTitleBar': (colors: { color: string; symbolColor: string }) => void;
 }

@@ -17,12 +17,14 @@ export const IPC_CHANNELS = {
   SHELL_HAS_RUNNING_SCRIPT: 'shell:hasRunningScript',
   SHELL_IS_SHELL_FOREGROUND: 'shell:isShellForeground',
   CLIPBOARD_WRITE: 'clipboard:write',
+  CLIPBOARD_READ: 'clipboard:read',
   THEME_GET_SYSTEM: 'theme:getSystem',
   THEME_SYSTEM_CHANGED: 'theme:systemChanged',
   WINDOW_STATE: 'window:state',
   WINDOW_TOGGLE_MAXIMIZE: 'window:toggleMaximize',
   WINDOW_MINIMIZE: 'window:minimize',
   WINDOW_CLOSE: 'window:close',
+  WINDOW_SET_TITLEBAR: 'window:setTitleBar',
   APP_QUIT: 'app:quit',
   APP_OPEN_EXTERNAL: 'app:openExternal',
   SERVICES_REGISTRY: 'services:registry',
@@ -34,6 +36,8 @@ export const IPC_CHANNELS = {
   MENU_NEXT_TAB: 'menu:nextTab',
   MENU_SHOW_SHORTCUTS: 'menu:showShortcuts',
   MENU_ZOOM: 'menu:zoom',
+  MENU_COPY: 'menu:copy',
+  MENU_PASTE: 'menu:paste',
 } as const;
 
 export const DEFAULT_CONFIG: Config = {
