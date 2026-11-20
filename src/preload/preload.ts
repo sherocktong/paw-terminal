@@ -22,6 +22,10 @@ export interface PuppyApi {
   clipboard: {
     writeText: (text: string) => void;
     readText: () => Promise<string>;
+    /** Save the image currently on the clipboard and return its file path. */
+    readImagePath: () => Promise<string | null>;
+    /** Save raw image bytes to a temp file and return its file path. */
+    saveImage: (data: Uint8Array, mimeType: string) => Promise<string | null>;
   };
   theme: {
     getSystem: () => Promise<AppearanceMode>;
@@ -107,6 +111,9 @@ const api: PuppyApi = {
   clipboard: {
     writeText: (text: string) => ipcRenderer.send(IPC_CHANNELS.CLIPBOARD_WRITE, text),
     readText: () => ipcRenderer.invoke(IPC_CHANNELS.CLIPBOARD_READ),
+    readImagePath: () => ipcRenderer.invoke(IPC_CHANNELS.CLIPBOARD_READ_IMAGE_PATH),
+    saveImage: (data: Uint8Array, mimeType: string) =>
+      ipcRenderer.invoke(IPC_CHANNELS.CLIPBOARD_SAVE_IMAGE, data, mimeType),
   },
   theme: {
     getSystem: () => ipcRenderer.invoke(IPC_CHANNELS.THEME_GET_SYSTEM),

@@ -142,6 +142,8 @@ export interface IpcChannels {
   'shell:cwd': () => string | undefined;
   'clipboard:write': (text: string) => void;
   'clipboard:read': () => string;
+  'clipboard:readImagePath': () => string | null;
+  'clipboard:saveImage': (data: Uint8Array, mimeType: string) => string | null;
   'theme:getSystem': () => AppearanceMode;
   'theme:systemChanged': (mode: AppearanceMode) => void;
   'window:state': (state: WindowState) => void;

@@ -34,6 +34,22 @@ const KEY_NAME_ALIASES: Record<string, string> = {
   Right: 'ArrowRight',
 };
 
+/**
+ * Quote a filesystem path so the shell accepts it as a single argument.
+ * Windows shells want quotes; POSIX shells are fine with escaped spaces.
+ */
+function formatShellPath(filePath: string): string {
+  return isWindowsPlatform ? `"${filePath}"` : filePath.replace(/ /g, '\\ ');
+}
+
+/** True when the pasted data contains image pixels (e.g. a copied screenshot). */
+function findPastedImage(files: FileList | File[]): File | null {
+  for (const file of Array.from(files)) {
+    if (file.type.startsWith('image/')) return file;
+  }
+  return null;
+}
+
 interface Tab {
   id: string;
   pid: number;
@@ -95,6 +111,7 @@ export class TabManager {
     this.startCwdPolling();
     this.startScriptPolling();
     this.setupGlobalDragOver();
+    this.setupImagePasteHandler();
   }
 
   async addTab(): Promise<void> {
@@ -688,22 +705,10 @@ export class TabManager {
         tab.copyMode.exit();
       }
 
-      const paths: string[] = [];
-      for (let i = 0; i < files.length; i++) {
-        const file = files[i];
-        try {
-          const path = window.puppy.webUtils.getPathForFile(file);
-          if (path) {
-            paths.push(path.replace(/ /g, '\\ '));
-          }
-        } catch {
-          // Ignore files without a path
-        }
-      }
-
+      const paths = this.filePathsFrom(files);
       if (paths.length === 0) return;
 
-      const text = paths.join(' ');
+      const text = paths.map(formatShellPath).join(' ');
       // Wrap in bracketed-paste sequences so Claude Code treats the drop
       // exactly like a paste, triggering image-path detection.
       const bracketed = '\x1b[200~' + text + '\x1b[201~ ';
@@ -724,6 +729,72 @@ export class TabManager {
         tab.term.focus();
       });
     });
+  }
+
+  private setupImagePasteHandler(): void {
+    // Native menu paste / browser paste only deliver text to xterm.js, so an
+    // image on the clipboard is silently dropped. Intercept image-only pastes
+    // on their way to a terminal and write the saved image path instead.
+    // Capture phase to run before xterm.js handles the event.
+    document.addEventListener('paste', (e) => this.handleImagePaste(e), true);
+  }
+
+  private handleImagePaste(e: ClipboardEvent): void {
+    const data = e.clipboardData;
+    if (!data) return;
+    // Text pastes keep the existing xterm.js / native behaviour
+    if (data.getData('text/plain')) return;
+    // Regular text inputs (copy-mode search, settings) keep native behaviour
+    if (this.getFocusedTextInput()) return;
+
+    const files = data.files;
+    if (!files || files.length === 0) return;
+
+    // Files copied in Finder/Explorer carry a real path → paste it directly
+    const paths = this.filePathsFrom(files);
+    const image = findPastedImage(files);
+    if (paths.length === 0 && !image) return;
+
+    e.preventDefault();
+    e.stopPropagation();
+
+    const tab = this.getActiveTab();
+    if (!tab) return;
+    if (tab.copyMode.isActive()) tab.copyMode.exit();
+
+    if (paths.length > 0) {
+      tab.term.focus();
+      tab.term.paste(paths.map(formatShellPath).join(' '));
+      return;
+    }
+    void this.saveAndPasteImage(tab.term, image as File);
+  }
+
+  /** Write clipboard image bytes to a temp file and paste its path. */
+  private async saveAndPasteImage(term: Terminal, image: File): Promise<void> {
+    try {
+      const data = new Uint8Array(await image.arrayBuffer());
+      const filePath = await window.puppy.clipboard.saveImage(data, image.type);
+      if (!filePath) return;
+      term.focus();
+      term.paste(formatShellPath(filePath));
+    } catch (err) {
+      console.error('Failed to paste image path into terminal:', err);
+    }
+  }
+
+  /** Paths of dropped/pasted files, skipping clipboard blobs with no path. */
+  private filePathsFrom(files: FileList | File[]): string[] {
+    const paths: string[] = [];
+    for (const file of Array.from(files)) {
+      try {
+        const filePath = window.puppy.webUtils.getPathForFile(file);
+        if (filePath) paths.push(filePath);
+      } catch {
+        // Ignore files without a path (e.g. clipboard image blobs)
+      }
+    }
+    return paths;
   }
 
   private startCwdPolling(): void {
@@ -964,11 +1035,20 @@ export class TabManager {
   }
 
   private pasteIntoTerminal(term: Terminal): void {
-    void window.puppy.clipboard.readText().then((text) => {
-      if (!text) return;
+    void (async () => {
+      const text = await window.puppy.clipboard.readText();
+      if (text) {
+        term.focus();
+        term.paste(text);
+        return;
+      }
+      // No text on the clipboard: fall back to a pasted image, saved to a
+      // temp file so its path can be typed into the shell.
+      const filePath = await window.puppy.clipboard.readImagePath();
+      if (!filePath) return;
       term.focus();
-      term.paste(text);
-    });
+      term.paste(formatShellPath(filePath));
+    })();
   }
 
   private getActiveTab(): Tab | null {

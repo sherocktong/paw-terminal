@@ -18,6 +18,8 @@ export const IPC_CHANNELS = {
   SHELL_IS_SHELL_FOREGROUND: 'shell:isShellForeground',
   CLIPBOARD_WRITE: 'clipboard:write',
   CLIPBOARD_READ: 'clipboard:read',
+  CLIPBOARD_READ_IMAGE_PATH: 'clipboard:readImagePath',
+  CLIPBOARD_SAVE_IMAGE: 'clipboard:saveImage',
   THEME_GET_SYSTEM: 'theme:getSystem',
   THEME_SYSTEM_CHANGED: 'theme:systemChanged',
   WINDOW_STATE: 'window:state',

@@ -1,5 +1,8 @@
 import { ipcMain, clipboard, nativeTheme, BrowserWindow, app, shell } from 'electron';
 import crypto from 'crypto';
+import fs from 'fs';
+import os from 'os';
+import path from 'path';
 import { IPC_CHANNELS } from '../shared/constants';
 import { TITLE_BAR_HEIGHT } from './window-manager';
 import { loadConfig, saveConfig } from './config-manager';
@@ -9,6 +12,47 @@ import type { IPty } from 'node-pty';
 import { performMenuAction } from './menu-builder';
 
 const ptyMap = new Map<string, IPty>();
+
+const PASTED_IMAGE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+
+/** Map an image MIME type to a safe file extension. */
+function imageExtension(mimeType: string): string {
+  const ext = (mimeType || '').split('/')[1]?.toLowerCase() ?? '';
+  if (ext === 'jpeg' || ext === 'jpg') return 'jpg';
+  if (/^[a-z0-9]{1,5}$/.test(ext)) return ext;
+  return 'png';
+}
+
+/** Write image bytes into the paste temp directory and return the file path. */
+function saveImageToTempFile(data: Buffer, ext: string): string {
+  const dir = path.join(os.tmpdir(), 'paw-terminal-paste');
+  fs.mkdirSync(dir, { recursive: true });
+  pruneOldPastedImages(dir);
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+  const suffix = crypto.randomBytes(3).toString('hex');
+  const file = path.join(dir, `pasted-image-${stamp}-${suffix}.${ext}`);
+  fs.writeFileSync(file, data);
+  return file;
+}
+
+/** Best-effort cleanup so the temp directory does not grow forever. */
+function pruneOldPastedImages(dir: string): void {
+  const cutoff = Date.now() - PASTED_IMAGE_MAX_AGE_MS;
+  let entries: string[];
+  try {
+    entries = fs.readdirSync(dir);
+  } catch {
+    return;
+  }
+  for (const entry of entries) {
+    const full = path.join(dir, entry);
+    try {
+      if (fs.statSync(full).mtimeMs < cutoff) fs.rmSync(full, { force: true });
+    } catch {
+      // Ignore (file may be in use or already gone)
+    }
+  }
+}
 
 export function registerIpcHandlers(): void {
   // Menu actions forwarded by the renderer keyboard shortcut handler
@@ -117,6 +161,22 @@ export function registerIpcHandlers(): void {
   });
 
   ipcMain.handle(IPC_CHANNELS.CLIPBOARD_READ, () => clipboard.readText());
+
+  // Pasting an image writes it to a temp file so the renderer can paste the
+  // file path into the terminal (e.g. for Claude Code's image input).
+  ipcMain.handle(IPC_CHANNELS.CLIPBOARD_READ_IMAGE_PATH, (): string | null => {
+    const image = clipboard.readImage();
+    if (image.isEmpty()) return null;
+    return saveImageToTempFile(image.toPNG(), 'png');
+  });
+
+  ipcMain.handle(
+    IPC_CHANNELS.CLIPBOARD_SAVE_IMAGE,
+    (_event, data: Uint8Array, mimeType: string): string | null => {
+      if (!(data instanceof Uint8Array) || data.byteLength === 0) return null;
+      return saveImageToTempFile(Buffer.from(data), imageExtension(mimeType));
+    },
+  );
 
   // Keep the native window controls (Windows title bar overlay) in sync
   ipcMain.on(
