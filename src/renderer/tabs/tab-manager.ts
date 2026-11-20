@@ -1059,7 +1059,14 @@ export class TabManager {
   /** Returns the focused DOM text input, ignoring xterm's hidden textarea. */
   private getFocusedTextInput(): HTMLInputElement | HTMLTextAreaElement | null {
     const el = document.activeElement;
-    if (el instanceof HTMLTextAreaElement) return el;
+    if (el instanceof HTMLTextAreaElement) {
+      // While the terminal is focused, xterm's helper textarea is the active
+      // element. Clipboard keys there are handled by handleTerminalClipboardKey;
+      // treating it as a regular input would paste a second time (the inserted
+      // text triggers xterm's input event → PTY).
+      if (el.classList.contains('xterm-helper-textarea')) return null;
+      return el;
+    }
     if (el instanceof HTMLInputElement) {
       const type = el.type.toLowerCase();
       const textTypes = ['text', 'search', 'url', 'tel', 'password', 'email', 'number'];
