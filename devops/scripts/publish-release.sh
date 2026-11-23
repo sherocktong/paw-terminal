@@ -37,9 +37,19 @@ if ! git diff --quiet HEAD || ! git diff --cached --quiet; then
     exit 1
 fi
 
-# Bump patch version automatically
-echo "Bumping patch version..."
-npm version patch --no-git-tag-version
+# Resolve the version once (highest of package.json and existing tags, bumped
+# one patch if that version has already been released). The same value is used
+# for package.json, the artifact file names and the release tag.
+git fetch --tags --quiet origin || true
+PKG_VERSION=$(node -p "require('./package.json').version")
+LATEST_TAG=$(git tag -l 'v*' --sort=-v:refname | head -1 | sed 's/^v//')
+TARGET_VERSION=$(printf '%s\n' "$PKG_VERSION" "${LATEST_TAG:-0.0.0}" | sort -V | tail -1)
+if git rev-parse -q --verify "refs/tags/v$TARGET_VERSION" >/dev/null; then
+    TARGET_VERSION=$(echo "$TARGET_VERSION" | awk -F. 'NF==3{print $1"."$2"."$3+1; next} {print $0".1"}')
+fi
+
+echo "Setting version to ${TARGET_VERSION} (package.json was ${PKG_VERSION}, latest tag: ${LATEST_TAG:-none})"
+npm version "$TARGET_VERSION" --no-git-tag-version
 git add package.json package-lock.json
 git commit -m "chore(release): bump version to $(node -p "require('./package.json').version")"
 echo ""
@@ -87,7 +97,13 @@ fi
 
 echo "Artifacts to publish:"
 for f in "${ARTIFACTS[@]}"; do
-    echo "  - $(basename "$f")"
+    base=$(basename "$f")
+    if [[ "$base" != *"$VERSION"* ]]; then
+        echo "Error: '${base}' does not contain the release version ${VERSION}"
+        echo "Rebuild after bumping the version (stale artifacts in release/)."
+        exit 1
+    fi
+    echo "  - ${base}"
 done
 echo ""
 

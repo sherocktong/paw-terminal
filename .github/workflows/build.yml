@@ -6,12 +6,65 @@ on:
   pull_request:
     branches: [main]
 
+# Serialize runs per ref so two pushes can never compute the same release
+# version while both are in flight.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
+  # The version is resolved exactly once here and then handed to every build
+  # job and to the release job. This is what keeps the asset file names
+  # (Paw-<version>-arm64.dmg, Paw Setup <version>.exe, ...) in sync with the
+  # GitHub release tag (v<version>).
+  version:
+    name: Resolve version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.resolve.outputs.version }}
+      release: ${{ steps.resolve.outputs.release }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve version
+        id: resolve
+        run: |
+          set -euo pipefail
+          PKG_VERSION=$(node -p "require('./package.json').version")
+
+          if [ "${{ github.event_name }}" != "push" ] || [ "${{ github.ref }}" != "refs/heads/main" ]; then
+            echo "version=$PKG_VERSION" >> "$GITHUB_OUTPUT"
+            echo "release=false" >> "$GITHUB_OUTPUT"
+            echo "Pull request build - using package.json version $PKG_VERSION (no release)"
+            exit 0
+          fi
+
+          LATEST_TAG=$(git tag -l 'v*' --sort=-v:refname | head -1 | sed 's/^v//')
+          HIGHEST=$(printf '%s\n' "$PKG_VERSION" "${LATEST_TAG:-0.0.0}" | sort -V | tail -1)
+          if git rev-parse -q --verify "refs/tags/v$HIGHEST" >/dev/null; then
+            # Tag already published -> bump patch
+            VERSION=$(echo "$HIGHEST" | awk -F. 'NF==3{print $1"."$2"."$3+1; next} {print $0".1"}')
+          else
+            VERSION="$HIGHEST"
+          fi
+
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "release=true" >> "$GITHUB_OUTPUT"
+          echo "Resolved release version: $VERSION (package.json: $PKG_VERSION, latest tag: ${LATEST_TAG:-none})"
+
   build:
+    name: Build (${{ matrix.os }})
+    needs: version
     runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
         os: [macos-latest, ubuntu-latest, windows-latest]
+    env:
+      APP_VERSION: ${{ needs.version.outputs.version }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -25,6 +78,15 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # electron-builder derives artifact file names from package.json, so the
+      # resolved version must be written there before packaging.
+      - name: Sync version into package.json
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm version "$APP_VERSION" --no-git-tag-version --allow-same-version
+          node -p "'Packaging as ' + require('./package.json').version"
+
       - name: Build application
         run: npm run build
 
@@ -32,6 +94,28 @@ jobs:
         run: npx electron-builder --publish=never
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Verify artifact names match version
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          files=(release/*.dmg release/*.AppImage release/*.exe release/*.msi release/*.zip)
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "::error::No artifacts were produced in release/"
+            exit 1
+          fi
+          status=0
+          for f in "${files[@]}"; do
+            base=$(basename "$f")
+            if [[ "$base" != *"$APP_VERSION"* ]]; then
+              echo "::error::Artifact '$base' does not contain the release version $APP_VERSION"
+              status=1
+            else
+              echo "ok: $base"
+            fi
+          done
+          exit $status
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -45,32 +129,24 @@ jobs:
             release/*.zip
 
   release:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: build
+    name: Publish release
+    needs: [version, build]
+    if: needs.version.outputs.release == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: write
+    env:
+      APP_VERSION: ${{ needs.version.outputs.version }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Compute next version
-        id: version
-        run: |
-          PKG_VERSION=$(node -p "require('./package.json').version")
-          LATEST_TAG=$(git tag -l 'v*' --sort=-v:refname | head -1 | sed 's/^v//')
-          HIGHEST=$(printf '%s\n' "$PKG_VERSION" "$LATEST_TAG" | grep -v '^$' | sort -V | tail -1)
-          if [ -n "$HIGHEST" ] && git rev-parse -q --verify "refs/tags/v$HIGHEST" >/dev/null; then
-            # tag already exists -> bump patch
-            NEXT=$(echo "$HIGHEST" | awk -F. 'NF==3{print $1"."$2"."$3+1; next} {print $0".1"}')
-          else
-            NEXT="$HIGHEST"
-          fi
-          [ -n "$NEXT" ] || NEXT="$PKG_VERSION"
-          echo "version=$NEXT" >> "$GITHUB_OUTPUT"
-          echo "Next release version: v$NEXT (package.json: $PKG_VERSION, latest tag: ${LATEST_TAG:-none})"
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
 
       - name: Download macOS artifacts
         uses: actions/download-artifact@v4
@@ -90,17 +166,61 @@ jobs:
           name: dist-ubuntu-latest
           path: pkgs/linux
 
+      # Keeps package.json tracking the last released version, so the next run
+      # only has to bump the patch instead of drifting behind the tags.
+      - name: Commit version bump and create tag
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          npm version "$APP_VERSION" --no-git-tag-version --allow-same-version
+
+          if ! git diff --quiet -- package.json package-lock.json; then
+            git add package.json package-lock.json
+            git commit -m "chore(release): v$APP_VERSION"
+            git tag -a "v$APP_VERSION" -m "Release v$APP_VERSION"
+            # Version bump: best effort, branch protection may block it.
+            git push origin HEAD:main || \
+              echo "::warning::Could not push the version bump to main; package.json lags behind v$APP_VERSION."
+          else
+            git tag -a "v$APP_VERSION" -m "Release v$APP_VERSION"
+          fi
+
+          git push origin "refs/tags/v$APP_VERSION"
+
       - name: Create release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          VERSION: ${{ steps.version.outputs.version }}
         run: |
+          set -euo pipefail
           FILES=()
           while IFS= read -r f; do FILES+=("$f"); done \
             < <(find pkgs -type f \( -name '*.dmg' -o -name '*.AppImage' -o -name '*.exe' -o -name '*.msi' -o -name '*.zip' \) | sort)
+
+          if [ ${#FILES[@]} -eq 0 ]; then
+            echo "::error::No release artifacts downloaded"
+            exit 1
+          fi
+
           echo "Release files:"
-          printf '%s\n' "${FILES[@]}"
-          gh release create "v$VERSION" "${FILES[@]}" \
-            --title "Paw v$VERSION" \
-            --generate-notes \
-            --latest
+          for f in "${FILES[@]}"; do
+            base=$(basename "$f")
+            echo "  $base"
+            if [[ "$base" != *"$APP_VERSION"* ]]; then
+              echo "::error::Artifact '$base' does not match release version $APP_VERSION"
+              exit 1
+            fi
+          done
+
+          if gh release view "v$APP_VERSION" >/dev/null 2>&1; then
+            echo "Release v$APP_VERSION already exists - uploading assets"
+            gh release upload "v$APP_VERSION" "${FILES[@]}" --clobber
+          else
+            gh release create "v$APP_VERSION" "${FILES[@]}" \
+              --title "Paw v$APP_VERSION" \
+              --generate-notes \
+              --latest
+          fi
