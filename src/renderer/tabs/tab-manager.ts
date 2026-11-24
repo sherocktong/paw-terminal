@@ -1010,6 +1010,10 @@ export class TabManager {
    * a selection, so an unselected Ctrl+C still reaches the shell as SIGINT.
    */
   private handleTerminalClipboardKey(e: KeyboardEvent, term: Terminal): boolean {
+    // xterm invokes this handler for BOTH keydown and keyup. Only act on
+    // keydown — otherwise Ctrl+V pastes on keydown and again on keyup
+    // (ctrlKey is still set on the keyup event).
+    if (e.type !== 'keydown') return false;
     if (!(e.ctrlKey || e.metaKey) || e.altKey) return false;
     const key = e.key.toLowerCase();
 
